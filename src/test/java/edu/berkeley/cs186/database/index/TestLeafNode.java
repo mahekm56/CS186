@@ -151,6 +151,31 @@ public class TestLeafNode {
         }
     }
 
+    // write by my own
+    @Test
+    @Category(PublicTests.class)
+    public void testOverflowPuts() {
+        int d = 5;
+        setBPlusTreeMetadata(Type.intType(), d);
+        LeafNode leaf = getEmptyLeaf(Optional.empty());
+
+        for (int i = 0; i < 2 * d; ++i) {
+            DataBox key = new IntDataBox(i);
+            RecordId rid = new RecordId(i, (short) i);
+            assertEquals(Optional.empty(), leaf.put(key, rid));
+
+            for (int j = 0; j <= i; ++j) {
+                key = new IntDataBox(j);
+                rid = new RecordId(j, (short) j);
+                assertEquals(Optional.of(rid), leaf.getKey(key));
+            }
+        }
+        int lastValue = 2 * d;
+        DataBox key = new IntDataBox(lastValue);
+        RecordId rid = new RecordId(lastValue, (short) lastValue);
+        assertEquals(new IntDataBox(d), leaf.put(key, rid).get().getFirst());
+    }
+
     @Test
     @Category(PublicTests.class)
     public void testNoOverflowPutsFromDisk() {
