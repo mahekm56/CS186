@@ -200,6 +200,36 @@ public class TestLeafNode {
         }
     }
 
+
+    @Test
+    @Category(PublicTests.class)
+    public void testOverflowPutsFromDisk() {
+        int d = 5;
+        setBPlusTreeMetadata(Type.intType(), d);
+        LeafNode leaf = getEmptyLeaf(Optional.empty());
+
+        // Populate the leaf.
+        for (int i = 0; i < 2 * d + 1; ++i) {
+            leaf.put(new IntDataBox(i), new RecordId(i, (short) i));
+        }
+
+        // Then read the leaf from disk.
+        long pageNum = leaf.getPage().getPageNum();
+        LeafNode fromDisk = LeafNode.fromBytes(metadata, bufferManager, treeContext, pageNum);
+        LeafNode nCreatedLeafNode = fromDisk.getRightSibling().get();
+        // Check to see that we can read from disk.
+        for (int i = 0; i < d; ++i) {
+            IntDataBox key = new IntDataBox(i);
+            RecordId rid = new RecordId(i, (short) i);
+            assertEquals(Optional.of(rid), fromDisk.getKey(key));
+        }
+        for (int i = d; i < d+1; ++i) {
+            IntDataBox key = new IntDataBox(i);
+            RecordId rid = new RecordId(i, (short) i);
+            assertEquals(Optional.of(rid), nCreatedLeafNode.getKey(key));
+        }
+    }
+
     @Test(expected = BPlusTreeException.class)
     @Category(PublicTests.class)
     public void testDuplicatePut() {
