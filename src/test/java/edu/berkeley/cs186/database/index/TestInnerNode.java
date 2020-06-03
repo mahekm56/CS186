@@ -260,6 +260,33 @@ public class TestInnerNode {
 
     @Test
     @Category(PublicTests.class)
+    public void testOverflowPuts() {
+        IntDataBox key = null;
+        RecordId rid = null;
+
+        // Add to leaf 2.
+        key = new IntDataBox(20);
+        rid = new RecordId(20, (short) 20);
+        assertEquals(Optional.empty(), inner.put(key, rid));
+        keys2.add(0, key);
+        rids2.add(0, rid);
+        checkTreeMatchesExpectations();
+
+        // Add to leaf 2 again to cause leaf2 over flow
+        key = new IntDataBox(24);
+        rid = new RecordId(24, (short)24);
+        assertEquals(Optional.empty(), inner.put(key, rid));
+        for(int i=0;i<2;i++) {
+            keys2.remove(2);
+            rids2.remove(2);
+        }
+        innerKeys.add(2, new IntDataBox(22));
+        innerChildren.add(3, getLeaf(this.leaf2).getRightSibling().get().getPage().getPageNum());
+        checkTreeMatchesExpectations();
+    }
+
+    @Test
+    @Category(PublicTests.class)
     public void testRemove() {
         // Remove from leaf 0.
         inner.remove(new IntDataBox(1));

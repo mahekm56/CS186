@@ -246,6 +246,7 @@ class LeafNode extends BPlusNode {
                 if(keys.get(i).equals(key)) {
                     keys.remove(i);
                     rids.remove(i);
+                    sync();
                     return;
                 }
             }
