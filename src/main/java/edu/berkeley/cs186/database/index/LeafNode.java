@@ -140,14 +140,12 @@ class LeafNode extends BPlusNode {
     // See BPlusNode.get.
     @Override
     public LeafNode get(DataBox key) {
-        // TODO(proj2): implement
         return this;
     }
 
     // See BPlusNode.getLeftmostLeaf.
     @Override
     public LeafNode getLeftmostLeaf() {
-        // TODO(proj2): implement
         return this;
     }
 
@@ -208,8 +206,35 @@ class LeafNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
-        // TODO(proj2): implement
+        // the data must be sorted and should be checked in high level
+        // so when the data is too much, this method will stop and return
+        // the new created leaf node's key and its page number(in the new
+        // created leaf node, there is just one key), then the high level
+        // will know how to bulk load to the new created leaf node
 
+        int maxCapacity = (int)(2 * metadata.getOrder() * fillFactor);
+        while (data.hasNext()) {
+            Pair<DataBox, RecordId> nextPair = data.next();
+            keys.add(nextPair.getFirst());
+            rids.add(nextPair.getSecond());
+            if(keys.size() >= maxCapacity) {
+                break;
+            }
+        }
+        if(data.hasNext()) {
+            // create a new lead node
+            List<DataBox> nkeys = new ArrayList<>();
+            List<RecordId> nrids = new ArrayList<>();
+            Pair<DataBox, RecordId> nextPair = data.next();
+            nkeys.add(nextPair.getFirst());
+            nrids.add(nextPair.getSecond());
+            LeafNode nLeafNode = new LeafNode(metadata, bufferManager, nkeys, nrids, Optional.empty(), treeContext);
+            rightSibling = Optional.of(nLeafNode.page.getPageNum());
+            sync();
+            nLeafNode.sync();
+            return Optional.of(new Pair<>(nkeys.get(0), nLeafNode.page.getPageNum()));
+        }
+        sync();
         return Optional.empty();
     }
 

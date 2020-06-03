@@ -133,6 +133,32 @@ public class TestLeafNode {
 
     @Test
     @Category(PublicTests.class)
+    public void testBigBulkLoad() {
+        int d = 5;
+        float fillFactor = 0.8f;
+        setBPlusTreeMetadata(Type.intType(), d);
+        LeafNode leaf = getEmptyLeaf(Optional.empty());
+
+        List<Pair<DataBox, RecordId>> data = new ArrayList<>();
+        for (int i = 0; i < (int) Math.ceil(2 * d * fillFactor) + 1; ++i) {
+            DataBox key = new IntDataBox(i);
+            RecordId rid = new RecordId(i, (short) i);
+            data.add(i, new Pair<>(key, rid));
+        }
+
+        assertTrue(leaf.bulkLoad(data.iterator(), fillFactor).isPresent());
+
+        Iterator<RecordId> iter = leaf.scanAll();
+        Iterator<Pair<DataBox, RecordId>> expected = data.iterator();
+        while (iter.hasNext() && expected.hasNext()) {
+            assertEquals(expected.next().getSecond(), iter.next());
+        }
+        assertFalse(iter.hasNext());
+        assertTrue(expected.hasNext());
+    }
+
+    @Test
+    @Category(PublicTests.class)
     public void testNoOverflowPuts() {
         int d = 5;
         setBPlusTreeMetadata(Type.intType(), d);
