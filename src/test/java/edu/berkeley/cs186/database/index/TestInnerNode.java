@@ -287,6 +287,34 @@ public class TestInnerNode {
 
     @Test
     @Category(PublicTests.class)
+    public void testSimpleBulkLoad() {
+        IntDataBox key = null;
+        RecordId rid = null;
+        float fillFactor = 0.75f;
+
+        inner.remove(new IntDataBox(22));
+        keys2.remove(1);
+        rids2.remove(1);
+        checkTreeMatchesExpectations();
+
+        List<Pair<DataBox, RecordId>> data = new ArrayList<>();
+        for (int i = 24; i <= 26; ++i) {
+            data.add(new Pair<>(new IntDataBox(i), new RecordId(i, (short) i)));
+        }
+
+        assertFalse(inner.bulkLoad(data.iterator(), fillFactor).isPresent());
+
+        key = new IntDataBox(24);
+        rid = new RecordId(24, (short) 24);
+        keys2.add(key);
+        rids2.add(rid);
+        innerKeys.add(2, new IntDataBox(25));
+        innerChildren.add(3, getLeaf(this.leaf2).getRightSibling().get().getPage().getPageNum());
+        checkTreeMatchesExpectations();
+    }
+
+    @Test
+    @Category(PublicTests.class)
     public void testRemove() {
         // Remove from leaf 0.
         inner.remove(new IntDataBox(1));

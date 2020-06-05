@@ -144,6 +144,36 @@ public class TestBPlusTree {
 
     @Test
     @Category(PublicTests.class)
+    public void testComplicatedBulkLoad() {
+        BPlusTree tree = getBPlusTree(Type.intType(), 2);
+        float fillFactor = 0.75f;
+        assertEquals("()", tree.toSexp());
+
+        List<Pair<DataBox, RecordId>> data = new ArrayList<>();
+        for (int i = 1; i <= 16; ++i) {
+            data.add(new Pair<>(new IntDataBox(i), new RecordId(i, (short) i)));
+        }
+
+        tree.bulkLoad(data.iterator(), fillFactor);
+        //                             (10)
+        //                        /            \
+        //      (    4        7    )         (      13         16    )
+        //       /       |         |          /             |        |
+        // (1 2 3 _) (4 5 6 _) (7 8 9 _)  (10 11 12 _) (13 14 15 _) (16 _ _ _)
+        String leaf0 = "((1 (1 1)) (2 (2 2)) (3 (3 3)))";
+        String leaf1 = "((4 (4 4)) (5 (5 5)) (6 (6 6)))";
+        String leaf2 = "((7 (7 7)) (8 (8 8)) (9 (9 9)))";
+        String leaf3 = "((10 (10 10)) (11 (11 11)) (12 (12 12)))";
+        String leaf4 = "((13 (13 13)) (14 (14 14)) (15 (15 15)))";
+        String leaf5 = "((16 (16 16)))";
+        String inner1 = String.format("(%s 4 %s 7 %s)", leaf0, leaf1, leaf2);
+        String inner2 = String.format("(%s 13 %s 16 %s)", leaf3, leaf4, leaf5);
+        String sexp = String.format("(%s 10 %s)", inner1, inner2);
+        assertEquals(sexp, tree.toSexp());
+    }
+
+    @Test
+    @Category(PublicTests.class)
     public void testWhiteBoxTest() {
         BPlusTree tree = getBPlusTree(Type.intType(), 1);
         assertEquals("()", tree.toSexp());

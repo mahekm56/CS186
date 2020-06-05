@@ -121,7 +121,7 @@ class InnerNode extends BPlusNode {
                     nkeys.add(keys.get(i));
                     nChildren.add(children.get(i));
                 }
-                nChildren.add(children.get(2*metadata.getOrder()));
+                nChildren.add(children.get(2*metadata.getOrder()+1));
                 // clear this inner node's keys & children
                 for(int i=0;i<metadata.getOrder()+1;i++) {
                     keys.remove(metadata.getOrder());
@@ -141,8 +141,42 @@ class InnerNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
-        // TODO(proj2): implement
+        // find the rightmost child and bulk Load to it if return Optional.empty(),
+        // then it is OK. Else bulk the rest data into the return node
+        if(children.size() > 1) {
+            BPlusNode rightmostChild = getChild(children.size()-1);
+            Optional<Pair<DataBox, Long>> nChild = rightmostChild.bulkLoad(data, fillFactor);
+            while(nChild.isPresent()) {
+                // update current inner node
+                keys.add(nChild.get().getFirst());
+                children.add(nChild.get().getSecond());
+                if(keys.size() > 2 * metadata.getOrder()) {
+                    // now the inner node need to be splited
+                    DataBox retKey = keys.get(metadata.getOrder());
 
+                    // create new inner node's keys & children
+                    List<DataBox> nkeys = new ArrayList<>();
+                    List<Long> nChildren = new ArrayList<>();
+                    for(int i=metadata.getOrder()+1;i<keys.size();i++) {
+                        nkeys.add(keys.get(i));
+                        nChildren.add(children.get(i));
+                    }
+                    nChildren.add(children.get(2*metadata.getOrder()+1));
+                    // clear this inner node's keys & children
+                    for(int i=0;i<metadata.getOrder()+1;i++) {
+                        keys.remove(metadata.getOrder());
+                        children.remove(metadata.getOrder()+1);
+                    }
+                    InnerNode nInnerNode = new InnerNode(metadata, bufferManager, nkeys, nChildren, treeContext);
+                    sync();
+                    nInnerNode.sync();
+                    return Optional.of(new Pair<>(retKey, nInnerNode.page.getPageNum()));
+                }
+                rightmostChild = getChild(children.size()-1);
+                nChild = rightmostChild.bulkLoad(data, fillFactor);
+            }
+        }
+        sync();
         return Optional.empty();
     }
 

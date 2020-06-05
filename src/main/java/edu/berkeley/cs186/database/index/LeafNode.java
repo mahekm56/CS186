@@ -206,13 +206,14 @@ class LeafNode extends BPlusNode {
     @Override
     public Optional<Pair<DataBox, Long>> bulkLoad(Iterator<Pair<DataBox, RecordId>> data,
             float fillFactor) {
-        // the data must be sorted and should be checked in high level
-        // so when the data is too much, this method will stop and return
-        // the new created leaf node's key and its page number(in the new
-        // created leaf node, there is just one key), then the high level
-        // will know how to bulk load to the new created leaf node
+        // As BPlusTree comment mentioned, when call bulkLoad to BPlusTree,
+        // tree must be empty, the data must be sorted and should be checked
+        // in high level, so when the data is too much, this method will stop
+        // and return the new created leaf node's key and its page number(in
+        // the new created leaf node, there is just one key), then the high
+        // level will know how to bulk load to the new created leaf node
 
-        int maxCapacity = (int)(2 * metadata.getOrder() * fillFactor);
+        int maxCapacity = (int)Math.ceil(2 * metadata.getOrder() * fillFactor);
         while (data.hasNext()) {
             Pair<DataBox, RecordId> nextPair = data.next();
             keys.add(nextPair.getFirst());

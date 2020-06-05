@@ -136,7 +136,9 @@ public class BPlusTree {
      */
     public Optional<RecordId> get(DataBox key) {
         typecheck(key);
-        // TODO(proj2): implement
+        if(root != null) {
+            return root.get(key).getKey(key);
+        }
         // TODO(proj4_part3): B+ tree locking
 
         return Optional.empty();
@@ -261,10 +263,41 @@ public class BPlusTree {
      * bulkLoad (see comments in BPlusNode.bulkLoad).
      */
     public void bulkLoad(Iterator<Pair<DataBox, RecordId>> data, float fillFactor) {
-        // TODO(proj2): implement
         // TODO(proj4_part3): B+ tree locking
-
-        return;
+        if(root != null && root.toSexp().equals("()")) {
+            // firstly, root is a leaf node
+            Optional<Pair<DataBox, Long>> nChild = root.bulkLoad(data, fillFactor);
+            while (nChild.isPresent()) {
+                // overflow, need to generate a new inner node as the root
+                List<DataBox> nkeys = new ArrayList<>();
+                List<Long> nChildren = new ArrayList<>();
+                nkeys.add(nChild.get().getFirst());
+                // becaue this is a pure inner node, it has two children
+                nChildren.add(root.getPage().getPageNum());
+                nChildren.add(nChild.get().getSecond());
+                // now root is a new inner node
+                root = new InnerNode(metadata, bufferManager, nkeys, nChildren, lockContext);
+                nChild = root.bulkLoad(data, fillFactor);
+                /*while (nChild.isPresent()) {
+                    nkeys = new ArrayList<>();
+                    nChildren = new ArrayList<>();
+                    nkeys.add(nChild.get().getFirst());
+                    nChildren.add(root.getPage().getPageNum());
+                    nChildren.add(nChild.get().getSecond());
+                    root = new InnerNode(metadata, bufferManager, nkeys, nChildren, lockContext);
+                    // data iterate to next <K,V>
+                    while(data.hasNext()) {
+                        if(data.next().getFirst() == nChild.get().getFirst()) {
+                            // now data is point to the waiting to be bulked datas
+                            break;
+                        }
+                    }
+                    nChild = root.bulkLoad(data, fillFactor);
+                }*/
+            }
+        }else {
+            throw new BPlusTreeException("the tree is not empty");
+        }
     }
 
     /**
@@ -280,10 +313,10 @@ public class BPlusTree {
      */
     public void remove(DataBox key) {
         typecheck(key);
-        // TODO(proj2): implement
+        if(root != null) {
+            root.remove(key);
+        }
         // TODO(proj4_part3): B+ tree locking
-
-        return;
     }
 
     // Helpers /////////////////////////////////////////////////////////////////
