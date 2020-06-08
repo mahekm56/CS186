@@ -498,4 +498,20 @@ public class TestBPlusTree {
         assertEquals(3, InnerNode.maxOrder(pageSizeInBytes, keySchema));
         assertEquals(3, BPlusTree.maxOrder(pageSizeInBytes, keySchema));
     }
+
+    @Test
+    @Category(PublicTests.class)
+    public void testEmptyBPlusTree() {
+        BPlusTree tree = getBPlusTree(Type.intType(), 2);
+        assertFalse(tree.scanAll().hasNext());
+    }
+
+    @Test(expected = BPlusTreeException.class)
+    @Category(PublicTests.class)
+    public void testPutExistKey() {
+        BPlusTree tree = getBPlusTree(Type.intType(), 2);
+
+        tree.put(new IntDataBox(1), new RecordId(1, (short)1));
+        tree.put(new IntDataBox(1), new RecordId(2, (short)2));
+    }
 }
