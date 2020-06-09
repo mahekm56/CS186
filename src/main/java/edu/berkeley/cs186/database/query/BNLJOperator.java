@@ -67,6 +67,7 @@ class BNLJOperator extends JoinOperator {
 
             this.leftIterator = BNLJOperator.this.getPageIterator(this.getLeftTableName());
             fetchNextLeftBlock();
+            this.leftRecord = this.leftRecordIterator.next();
 
             this.rightIterator = BNLJOperator.this.getPageIterator(this.getRightTableName());
             this.rightIterator.markNext();
@@ -88,7 +89,11 @@ class BNLJOperator extends JoinOperator {
          * and leftRecord should be set to null.
          */
         private void fetchNextLeftBlock() {
-            // TODO(proj3_part1): implement
+            if(!this.leftIterator.hasNext())  {
+                throw new NoSuchElementException("All Done!");
+            }
+            this.leftRecordIterator = BNLJOperator.this.getBlockIterator(this.getLeftTableName(), this.leftIterator,
+                    numBuffers-2);
         }
 
         /**
@@ -100,7 +105,20 @@ class BNLJOperator extends JoinOperator {
          * should be set to null.
          */
         private void fetchNextRightPage() {
-            // TODO(proj3_part1): implement
+            if(!rightIterator.hasNext()) {
+                resetRightPageIterator();
+                if(!leftRecordIterator.hasNext()) {
+                    fetchNextLeftBlock();
+                }
+                this.leftRecord = this.leftRecordIterator.next();
+            }
+            this.rightRecordIterator = BNLJOperator.this.getBlockIterator(this.getRightTableName(), this.rightIterator,
+                    1);
+        }
+
+        private void resetRightPageIterator() {
+            this.rightIterator.reset();
+            assert(this.rightIterator.hasNext());
         }
 
         /**
@@ -110,7 +128,22 @@ class BNLJOperator extends JoinOperator {
          * @throws NoSuchElementException if there are no more Records to yield
          */
         private void fetchNextRecord() {
-            // TODO(proj3_part1): implement
+            if(this.leftIterator == null) {
+                throw new NoSuchElementException("All Done!");
+            }
+            this.nextRecord = null;
+            do{
+                if(this.rightRecordIterator.hasNext()) {
+                    DataBox leftJoinValue = this.leftRecord.getValues().get(BNLJOperator.this.getLeftColumnIndex());
+                    Record rightRecord = rightRecordIterator.next();
+                    DataBox rightJoinValue = rightRecord.getValues().get(BNLJOperator.this.getRightColumnIndex());
+                    if(leftJoinValue.equals(rightJoinValue)) {
+                        this.nextRecord = joinRecords(this.leftRecord, rightRecord);
+                    }
+                }else{
+                    fetchNextRightPage();
+                }
+            }while (!hasNext());
         }
 
         /**
