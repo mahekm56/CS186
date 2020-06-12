@@ -258,7 +258,34 @@ public class TestJoinOperator {
                     transaction.getTransactionContext().addRecord("rightTable", r2Vals);
                 }
             }
+            // leftTable                         rightTable
+            // -------------(0-199)              -------------
+            //     r1Vals                           r1Vals
+            // -------------(200-399)            -------------
+            //     r2Vals                           r2Vals
+            // -------------(400-599) (Page)------------------------------
+            //     r2Vals                           r1Vals
+            // -------------(600-799)            -------------
+            //     r1Vals                           r2Vals
+            // -------------                     -------------
 
+            // aftre PNJ should be
+            // ---------------------(200*200)
+            // r1Vals r1Vals
+            // ---------------------(200*200 * 2)
+            // r2Vals r2vals
+            // ---------------------(200*200 * 3)
+            // r1Vals r1vals
+            // ---------------------(200*200 * 4)
+            // r2Vals r2vals
+            // ---------------------(200*200 * 5)
+            // r2Vals r2vals
+            // ---------------------(200*200 * 6)
+            // r1Vals r1vals
+            // ---------------------(200*200 * 7)
+            // r2Vals r2vals
+            // ---------------------(200*200 * 8)
+            // r1Vals r1vals
             setSourceOperators(
                 new SequentialScanOperator(transaction.getTransactionContext(), "leftTable"),
                 new SequentialScanOperator(transaction.getTransactionContext(), "rightTable")

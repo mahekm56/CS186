@@ -66,12 +66,17 @@ class BNLJOperator extends JoinOperator {
             super();
 
             this.leftIterator = BNLJOperator.this.getPageIterator(this.getLeftTableName());
-            fetchNextLeftBlock();
+            this.leftIterator.markNext();
+            this.leftRecordIterator = BNLJOperator.this.getBlockIterator(this.getLeftTableName(), this.leftIterator,
+                    numBuffers-2);
+            this.leftRecordIterator.markNext();
             this.leftRecord = this.leftRecordIterator.next();
 
             this.rightIterator = BNLJOperator.this.getPageIterator(this.getRightTableName());
             this.rightIterator.markNext();
-            fetchNextRightPage();
+            this.rightRecordIterator = BNLJOperator.this.getBlockIterator(this.getRightTableName(), this.rightIterator,
+                    1);
+            this.rightRecordIterator.markNext();
 
             try {
                 this.fetchNextRecord();
@@ -94,6 +99,7 @@ class BNLJOperator extends JoinOperator {
             }
             this.leftRecordIterator = BNLJOperator.this.getBlockIterator(this.getLeftTableName(), this.leftIterator,
                     numBuffers-2);
+            this.leftRecordIterator.markNext();
         }
 
         /**
@@ -106,19 +112,31 @@ class BNLJOperator extends JoinOperator {
          */
         private void fetchNextRightPage() {
             if(!rightIterator.hasNext()) {
+                fetchNextLeftBlock();
                 resetRightPageIterator();
-                if(!leftRecordIterator.hasNext()) {
-                    fetchNextLeftBlock();
-                }
-                this.leftRecord = this.leftRecordIterator.next();
             }
             this.rightRecordIterator = BNLJOperator.this.getBlockIterator(this.getRightTableName(), this.rightIterator,
                     1);
+            this.rightRecordIterator.markNext();
+            resetLeftRecordIterator();
+        }
+
+        /**
+         * reset functions (including page and record)
+         */
+        private void resetLeftRecordIterator() {
+            this.leftRecordIterator.reset();
+            assert (this.leftRecordIterator.hasNext());
         }
 
         private void resetRightPageIterator() {
             this.rightIterator.reset();
             assert(this.rightIterator.hasNext());
+        }
+
+        private void resetRightRecordIterator() {
+            this.rightRecordIterator.reset();
+            assert (this.rightRecordIterator.hasNext());
         }
 
         /**
@@ -140,8 +158,12 @@ class BNLJOperator extends JoinOperator {
                     if(leftJoinValue.equals(rightJoinValue)) {
                         this.nextRecord = joinRecords(this.leftRecord, rightRecord);
                     }
-                }else{
-                    fetchNextRightPage();
+                }else {
+                    resetRightRecordIterator();
+                    if(!this.leftRecordIterator.hasNext()) {
+                        fetchNextRightPage();
+                    }
+                    this.leftRecord = this.leftRecordIterator.next();
                 }
             }while (!hasNext());
         }
