@@ -390,4 +390,40 @@ public class TestSortOperator {
         }
     }
 
+    @Test
+    @Category(PublicTests.class)
+    public void testSortRandomOrderWithMorePages() {
+        try(Transaction transaction = d.beginTransaction()) {
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "table");
+            List<Record> records = new ArrayList<>();
+            List<Record> recordsToShuffle = new ArrayList<>();
+            for (int i = 0; i < 400 * 3 * 5; i++) {
+                Record r = TestUtils.createRecordWithAllTypesWithValue(i);
+                records.add(r);
+                recordsToShuffle.add(r);
+            }
+            Collections.shuffle(recordsToShuffle, new Random(42));
+            for (Record r : recordsToShuffle) {
+                transaction.getTransactionContext().addRecord("table", r.getValues());
+            }
+
+            pinMetadata();
+            startCountIOs();
+
+            SortOperator s = new SortOperator(transaction.getTransactionContext(), "table",
+                    new SortRecordComparator(1));
+            checkIOs(0);
+
+            String sortedTableName = s.sort();
+
+            Iterator<Record> iter = transaction.getTransactionContext().getRecordIterator(sortedTableName);
+            int i = 0;
+            while (iter.hasNext() && i < 400 * 3 * 5) {
+                assertEquals("mismatch at record " + i, records.get(i), iter.next());
+                i++;
+            }
+            assertFalse("too many records", iter.hasNext());
+            assertEquals("too few records", 400 * 3 * 5, i);
+        }
+    }
 }
