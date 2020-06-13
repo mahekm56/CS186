@@ -64,7 +64,7 @@ public class HashPartition {
 
     /**
      * Adds a record from the left relation consisting of the values in the input
-     * @param values a list of values representing a record to be added
+     * @param leftValues a list of values representing a record to be added
      */
     public void addLeftRecord(List<DataBox> leftValues) {
         transaction.addRecord(this.tempLeftTableName, leftValues);
@@ -72,7 +72,7 @@ public class HashPartition {
 
     /**
      * Adds a record from the right relation consisting of the values in the input
-     * @param values a list of values representing a record to be added
+     * @param rightValues a list of values representing a record to be added
      */
     public void addRightRecord(List<DataBox> rightValues) {
         transaction.addRecord(this.tempRightTableName, rightValues);

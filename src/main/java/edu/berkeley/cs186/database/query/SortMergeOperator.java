@@ -48,16 +48,107 @@ class SortMergeOperator extends JoinOperator {
         * You should implement the solution that's best for you, using any member variables you need.
         * You're free to use these member variables, but you're not obligated to.
         */
-        private BacktrackingIterator<Record> leftIterator;
-        private BacktrackingIterator<Record> rightIterator;
+        private final BacktrackingIterator<Record> leftIterator;
+        private final BacktrackingIterator<Record> rightIterator;
         private Record leftRecord;
         private Record nextRecord;
-        private Record rightRecord;
-        private boolean marked;
 
         private SortMergeIterator() {
             super();
-            // TODO(proj3_part1): implement
+            // sort left and right and get their iterator
+            SortOperator sortedLeft = new SortOperator(getTransaction(), getLeftTableName(), new LeftRecordComparator());
+            String sortedLeftTableName = sortedLeft.sort();
+            this.leftIterator = getRecordIterator(sortedLeftTableName);
+            this.leftRecord = this.leftIterator.next();
+
+            SortOperator sortedRight = new SortOperator(getTransaction(), getRightTableName(), new RightRecordComparator());
+            String sortedRightTableName = sortedRight.sort();
+            this.rightIterator = getRecordIterator(sortedRightTableName);
+            this.rightIterator.markNext();
+
+            try{
+                fetchNextRecord();
+            }catch (NoSuchElementException e) {
+                this.nextRecord = null;
+            }
+        }
+
+        public void fetchNextRecord() {
+            if(this.leftIterator == null) {
+                throw new NoSuchElementException("All Done!");
+            }
+            this.nextRecord = null;
+            do{
+                if(this.rightIterator.hasNext()) {
+                    DataBox leftValue = this.leftRecord.getValues().get(SortMergeOperator.this.getLeftColumnIndex());
+                    Record rightRecord = this.rightIterator.next();
+                    DataBox rightValue = rightRecord.getValues().get(SortMergeOperator.this.getRightColumnIndex());
+                    while (leftValue.compareTo(rightValue) > 0 ) {
+                        if(!this.rightIterator.hasNext()) {
+                            throw new NoSuchElementException("All Done!");
+                        }
+                        rightRecord = this.rightIterator.next();
+                        rightValue = rightRecord.getValues().get(getRightColumnIndex());
+                    }
+                    if(leftValue.equals(rightValue)) {
+                        this.nextRecord = joinRecords(this.leftRecord, rightRecord);
+                    }else {
+                        if(!this.leftIterator.hasNext()) {
+                            throw new NoSuchElementException("All Done!");
+                        }
+                        this.leftRecord = this.leftIterator.next();
+                        resetRightIterator();
+                    }
+                }else {
+                    if(!this.leftIterator.hasNext()){
+                        throw new NoSuchElementException("All Done!");
+                    }
+                    this.leftRecord = this.leftIterator.next();
+                    resetRightIterator();
+                }
+            }while (!hasNext());
+
+            /*do{
+                DataBox leftValue = this.leftRecord.getValues().get(SortMergeOperator.this.getLeftColumnIndex());
+                DataBox rightValue = this.rightRecord.getValues().get(SortMergeOperator.this.getRightColumnIndex());
+                while (leftValue.compareTo(rightValue) > 0 ) {
+                    if(!this.rightIterator.hasNext()) {
+                        throw new NoSuchElementException("All Done!");
+                    }
+                    this.rightRecord = this.rightIterator.next();
+                    rightValue = this.rightRecord.getValues().get(getRightColumnIndex());
+                }
+                if(leftValue.equals(rightValue)) {
+                    this.nextRecord = joinRecords(this.leftRecord, this.rightRecord);
+                    if(this.rightIterator.hasNext()) {
+                        this.rightRecord = this.rightIterator.next();
+                    }else {
+                        if(!this.leftIterator.hasNext()){
+                            throw new NoSuchElementException("All Done!");
+                        }
+                        this.leftRecord = this.leftIterator.next();
+                        resetRightIterator();
+                    }
+                }else {
+                    if(!this.leftIterator.hasNext()) {
+                        throw new NoSuchElementException("All Done!");
+                    }
+                    this.leftRecord = this.leftIterator.next();
+                    resetRightIterator();
+                }
+            }while (!hasNext());*/
+        }
+
+        private void resetRightIterator() {
+            this.rightIterator.reset();
+            assert (this.rightIterator.hasNext());
+        }
+
+        private Record joinRecords(Record leftRecord, Record rightRecord) {
+            List<DataBox> leftValues = new ArrayList<>(leftRecord.getValues());
+            List<DataBox> rightValues = new ArrayList<>(rightRecord.getValues());
+            leftValues.addAll(rightValues);
+            return new Record(leftValues);
         }
 
         /**
@@ -67,9 +158,7 @@ class SortMergeOperator extends JoinOperator {
          */
         @Override
         public boolean hasNext() {
-            // TODO(proj3_part1): implement
-
-            return false;
+            return nextRecord != null;
         }
 
         /**
@@ -80,9 +169,19 @@ class SortMergeOperator extends JoinOperator {
          */
         @Override
         public Record next() {
-            // TODO(proj3_part1): implement
+            if(!hasNext()) {
+                throw new NoSuchElementException();
+            }
 
-            throw new NoSuchElementException();
+            Record nextRecord = this.nextRecord;
+
+            try {
+                fetchNextRecord();
+            }catch (NoSuchElementException e) {
+                this.nextRecord = null;
+            }
+
+            return nextRecord;
         }
 
         @Override
