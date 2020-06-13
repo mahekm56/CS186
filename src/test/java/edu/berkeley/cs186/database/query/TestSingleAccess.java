@@ -55,6 +55,15 @@ public class TestSingleAccess {
 
             Schema schema = TestUtils.createSchemaWithAllTypes();
 
+            /*
+             T:     empty
+             TI:    index column name(int)
+             TMI:   index column name(int, float)
+             To1:   Schema: Name(one_bool, one_int, one_string, one_float)
+             To2:   ---
+             To3:   ---
+             To4:   ---
+             */
             t.createTable(schema, TABLENAME);
 
             t.createTable(schema, TABLENAME + "I");
