@@ -330,8 +330,11 @@ public class GraceHashJoin {
         ArrayList<Record> leftRecords = new ArrayList<>();
         ArrayList<Record> rightRecords = new ArrayList<>();
 
-        // TODO(proj3_part1): populate leftRecords and rightRecords such that NHJ breaks but not GHJ
+        for(int i = 0;i<976*5*5;i+=5) {
+            leftRecords.add(createRecord(i));
+        }
 
+        rightRecords.add(createRecord(1));
         return new Pair<>(leftRecords, rightRecords);
     }
 
@@ -355,8 +358,12 @@ public class GraceHashJoin {
         ArrayList<Record> leftRecords = new ArrayList<>();
         ArrayList<Record> rightRecords = new ArrayList<>();
 
-        // TODO(proj3_part1): populate leftRecords and rightRecords such that GHJ breaks
-
+        for(int i=0;i<976*5;i++) {
+            leftRecords.add(createRecord(1));
+        }
+        for(int i=0;i<976*5;i++) {
+            rightRecords.add(createRecord(1));
+        }
         return new Pair<>(leftRecords, rightRecords);
     }
 }
