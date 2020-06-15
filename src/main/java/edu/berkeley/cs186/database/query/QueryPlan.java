@@ -247,7 +247,6 @@ public class QueryPlan {
         for(int i=0;i<this.joinTableNames.size();i++) {
             finalMap = minCostJoins(finalMap, singleAccess);
         }
-        // TODO
         // Get the lowest cost operator from the last pass, add GROUP BY and SELECT
         // operators, and return an iterator on the final operator
         int minCost = Integer.MAX_VALUE;
@@ -258,6 +257,14 @@ public class QueryPlan {
                 minCost = currentCost;
                 finalQueryOperator = entry.getValue();
             }
+        }
+        if(this.groupByColumn != null) {
+            finalQueryOperator = new GroupByOperator(finalQueryOperator, this.transaction, this.groupByColumn);
+        }
+        if(!this.projectColumns.isEmpty() || this.hasCount || this.averageColumnName != null
+            || this.sumColumnName != null) {
+            finalQueryOperator = new ProjectOperator(finalQueryOperator, this.projectColumns, this.hasCount,
+                    this.averageColumnName, this.sumColumnName);
         }
         this.finalOperator = finalQueryOperator;
         return finalQueryOperator.iterator();
