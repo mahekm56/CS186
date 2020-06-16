@@ -60,6 +60,27 @@ public class TestLockType {
         assertTrue(LockType.compatible(LockType.IS, LockType.NL));
         assertTrue(LockType.compatible(LockType.IX, LockType.NL));
         assertTrue(LockType.compatible(LockType.SIX, LockType.NL));
+
+        // hiden tests
+        assertTrue(LockType.compatible(LockType.IX, LockType.IX));
+        assertTrue(LockType.compatible(LockType.S, LockType.S));
+        assertFalse(LockType.compatible(LockType.S, LockType.IX));
+        assertFalse(LockType.compatible(LockType.IX, LockType.S));
+        for(LockType lock : LockType.values()) {
+            if(lock != LockType.NL) {
+                assertFalse(LockType.compatible(LockType.X, lock));
+                assertFalse(LockType.compatible(lock, LockType.X));
+                if(lock != LockType.X) {
+                    assertTrue(LockType.compatible(LockType.IS, lock));
+                    assertTrue(LockType.compatible(lock, LockType.IS));
+                    if(lock == LockType.SIX) {
+                        assertFalse(LockType.compatible(lock, LockType.S));
+                        assertFalse(LockType.compatible(lock, LockType.IX));
+                        assertFalse(LockType.compatible(lock, LockType.SIX));
+                    }
+                }
+            }
+        }
     }
 
     @Test
