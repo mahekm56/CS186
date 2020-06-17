@@ -66,7 +66,14 @@ public class LockManager {
          * Allows conflicts for locks held by transaction id EXCEPT.
          */
         boolean checkCompatible(LockType lockType, long except) {
-            // TODO(proj4_part1): implement
+            if(this.locks != null && !this.locks.isEmpty()) {
+                for(Lock lock : this.locks) {
+                    if(lock.transactionNum != except && !LockType.compatible(lockType, lock.lockType)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
             return false;
         }
 
@@ -75,16 +82,26 @@ public class LockManager {
          * Updates lock on resource if the transaction already has a lock.
          */
         void grantOrUpdateLock(Lock lock) {
-            // TODO(proj4_part1): implement
-            return;
+            if(this.locks == null || this.locks.isEmpty()) {
+                this.locks = new ArrayList<>();
+                this.locks.add(lock);
+            }else {
+                boolean res = this.locks.removeIf(curLock -> curLock.transactionNum.equals(lock.transactionNum)
+                                    && LockType.substitutable(lock.lockType, curLock.lockType));
+                if(res) {
+                    this.locks.add(lock);
+                }
+            }
         }
 
         /**
          * Releases the lock LOCK and processes the queue. Assumes it had been granted before.
          */
         void releaseLock(Lock lock) {
-            // TODO(proj4_part1): implement
-            return;
+            if(this.locks != null && !this.locks.isEmpty()) {
+                this.locks.remove(lock);
+                this.waitingQueue.removeIf(lockRequest -> lockRequest.lock.equals(lock));
+            }
         }
 
         /**
@@ -92,8 +109,16 @@ public class LockManager {
          * in a blocked state.
          */
         void addToQueue(LockRequest request, boolean addFront) {
-            // TODO(proj4_part1): implement
-            return;
+            if(this.waitingQueue == null) {
+                this.waitingQueue = new ArrayDeque<>();
+            }
+            if(addFront) {
+                this.waitingQueue.addFirst(request);
+            }else {
+                this.waitingQueue.addLast(request);
+            }
+            // TODO check whether call transaction.prepareBlock() or transaction.block()
+            request.transaction.block();
         }
 
         /**
@@ -101,15 +126,37 @@ public class LockManager {
          * when the next lock cannot be granted.
          */
         private void processQueue() {
-            // TODO(proj4_part1): implement
-            return;
+            if(this.waitingQueue != null) {
+                for(LockRequest lockRequest : this.waitingQueue) {
+                    for(Lock lock : this.locks) {
+                        if(!LockType.compatible(lock.lockType, lockRequest.lock.lockType)) {
+                            return;
+                        }
+                    }
+                    // could grant lock to this lockRequest
+                    // release this request's released locks
+                    if(lockRequest.releasedLocks != null && !lockRequest.releasedLocks.isEmpty()) {
+                        this.locks.removeAll(lockRequest.releasedLocks);
+                    }
+                    // grant lock
+                    this.locks.add(lockRequest.lock);
+                    // unblock this transaction
+                    lockRequest.transaction.unblock();
+                }
+            }
         }
 
         /**
          * Gets the type of lock TRANSACTION has on this resource.
          */
         LockType getTransactionLockType(long transaction) {
-            // TODO(proj4_part1): implement
+            if(this.locks != null && !this.locks.isEmpty()) {
+                for(Lock lock : this.locks) {
+                    if(lock.transactionNum == transaction) {
+                        return lock.lockType;
+                    }
+                }
+            }
             return LockType.NL;
         }
 
