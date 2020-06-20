@@ -62,6 +62,9 @@ public class TestLockManager {
         }
     }
 
+    /**
+     * tests for LockManager.acquireAndRelease
+     */
     @Test
     @Category(PublicTests.class)
     public void testSimpleAcquireRelease() {
@@ -198,6 +201,9 @@ public class TestLockManager {
         runner.joinAll();
     }
 
+    /**
+     * tests for LockManager.acquire
+     */
     @Test
     @Category(PublicTests.class)
     public void testSimpleAcquireLock() {
@@ -246,6 +252,9 @@ public class TestLockManager {
         runner.joinAll();
     }
 
+    /**
+     * tests for LockManager.release
+     */
     @Test
     @Category(PublicTests.class)
     public void testSimpleReleaseLock() {
@@ -752,5 +761,8 @@ public class TestLockManager {
         runner.joinAll();
     }
 
+    /**
+     * developer added tests
+     */
 }
 
