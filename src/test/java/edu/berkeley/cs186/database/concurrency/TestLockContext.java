@@ -1,14 +1,11 @@
 package edu.berkeley.cs186.database.concurrency;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 
 import edu.berkeley.cs186.database.TimeoutScaling;
 import edu.berkeley.cs186.database.TransactionContext;
 import edu.berkeley.cs186.database.categories.*;
-import edu.berkeley.cs186.database.common.Pair;
 
 import org.junit.*;
 import org.junit.experimental.categories.Category;
@@ -397,4 +394,19 @@ public class TestLockContext {
         assertEquals(0.0, dbLockContext.saturation(t1), 1E-6);
     }
 
+    /**
+     * proj4-README.md hidden test
+     */
+    @Test
+    @Category(PublicTests.class)
+    public void testPromoteRoot() {
+        TransactionContext t1 = transactions[1];
+        dbLockContext.acquire(t1,  LockType.IX);
+        tableLockContext.acquire(t1, LockType.IS);
+        pageLockContext.acquire(t1, LockType.S);
+
+        dbLockContext.promote(t1, LockType.SIX);
+        assertEquals(null, dbLockContext.numChildLocks.get(t1.getTransNum()));
+        assertEquals(null, tableLockContext.numChildLocks.get(t1.getTransNum()));
+    }
 }

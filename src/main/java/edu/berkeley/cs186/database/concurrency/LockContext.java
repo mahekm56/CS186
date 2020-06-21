@@ -177,9 +177,62 @@ public class LockContext {
         this.checkReadOnly(transaction);
         // DuplicateLockRequestException & NoLockHeldException will be checked in Lock Manager
         // All need to do is check InvalidLockException(Lock Manager also check part of it)
+        if(this.parentContext() != null) {
+            LockType parentLockType = this.lockman.getLockType(transaction, this.parentContext().getResourceName());
+            if(!LockType.canBeParentLock(parentLockType, newLockType)) {
+                throw new InvalidLockException(String.format("transaction context(%d) request resource(%s) is invalid",
+                        transaction.getTransNum(), this.name));
+            }
+        }
+        if(this.hasSIXAncestor(transaction) && newLockType == LockType.SIX) {
+            throw new InvalidLockException(String.format("transaction context(%d) request resource(%s) is invalid",
+                    transaction.getTransNum(), this.name));
+        }
 
+        this.lockman.promote(transaction, this.getResourceName(), newLockType);
+        if(newLockType == LockType.SIX) {
+            List<ResourceName> resourceNames = this.sisDescendants(transaction);
+            if(!resourceNames.isEmpty()) {
+                this.updateNumChildLocks(transaction);
+
+                for(ResourceName resourceName : resourceNames) {
+                    this.lockman.release(transaction, resourceName);
+                }
+            }
+        }
     }
 
+    private int calcualteSISChildrenLocks(TransactionContext transactionContext) {
+        int res = 0;
+        if(this.children != null && !this.children.isEmpty()) {
+            for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                ResourceName name = entry.getValue().getResourceName();
+                LockType lockType = this.lockman.getLockType(transactionContext, name);
+                if(lockType == LockType.IS || lockType == LockType.S) {
+                    res++;
+                }
+            }
+        }
+        return res;
+    }
+
+    private void updateNumChildLocks(TransactionContext transactionContext) {
+        if(this.numChildLocks != null && !this.numChildLocks.isEmpty() && this.numChildLocks.containsKey(transactionContext.getTransNum())) {
+            int beforeChildNum = this.numChildLocks.get(transactionContext.getTransNum());
+            int aftreChildNum = beforeChildNum - this.calcualteSISChildrenLocks(transactionContext);
+            if(aftreChildNum < 1) {
+                this.numChildLocks.remove(transactionContext.getTransNum());
+            }else{
+                this.numChildLocks.put(transactionContext.getTransNum(), aftreChildNum);
+            }
+
+            if(this.children != null && !this.children.isEmpty()) {
+                for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                    entry.getValue().updateNumChildLocks(transactionContext);
+                }
+            }
+        }
+    }
     /**
      * Escalate TRANSACTION's lock from descendants of this context to this level, using either
      * an S or X lock. There should be no descendant locks after this
@@ -202,11 +255,72 @@ public class LockContext {
      * @throws UnsupportedOperationException if context is readonly
      */
     public void escalate(TransactionContext transaction) throws NoLockHeldException {
-        // TODO(proj4_part2): implement
+        if(transaction == null) {
+            return;
+        }
+        this.checkReadOnly(transaction);
+        LockType targetLockType = LockType.X;
+        LockType currLockType = this.lockman.getLockType(transaction, this.getResourceName());
+        if(currLockType == LockType.NL) {
+            throw new NoLockHeldException(String.format("transaction %d does not hold a lock on resource %s", transaction.getTransNum(), this.name));
+        }else if(currLockType == LockType.S || currLockType == LockType.X) {
+            return;
+        }
 
-        return;
+        if(this.onlySISDescendants(transaction) && currLockType == LockType.IS) {
+            targetLockType = LockType.S;
+        }
+
+        // collect released locks
+        List<ResourceName> releasedLocks = this.getDescendantsLocks(transaction);
+        releasedLocks.add(this.name);
+        this.lockman.acquireAndRelease(transaction, this.name, targetLockType, releasedLocks);
+        // update child
+        this.resetNumChildLocks(transaction);
     }
 
+    private boolean onlySISDescendants(TransactionContext transactionContext) {
+        if(this.children != null && !this.children.isEmpty()) {
+            for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                ResourceName name = entry.getValue().name;
+                LockType lockType = this.lockman.getLockType(transactionContext, name);
+                if(lockType == LockType.IX || lockType == LockType.SIX
+                    || lockType == LockType.X) {
+                    return false;
+                }
+                if(!entry.getValue().onlySISDescendants(transactionContext)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private List<ResourceName> getDescendantsLocks(TransactionContext transactionContext) {
+        List<ResourceName> releasedLocks = new ArrayList<>();
+        if(this.children != null && !this.children.isEmpty()) {
+            for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                ResourceName name = entry.getValue().name;
+                LockType lockType = this.lockman.getLockType(transactionContext, name);
+                if(lockType != LockType.NL) {
+                    releasedLocks.add(name);
+                    releasedLocks.addAll(entry.getValue().getDescendantsLocks(transactionContext));
+                }
+            }
+        }
+        return releasedLocks;
+    }
+
+    private void resetNumChildLocks(TransactionContext transactionContext) {
+        if(this.numChildLocks != null && !this.numChildLocks.isEmpty()) {
+            this.numChildLocks.remove(transactionContext.getTransNum());
+            if(this.children != null && !this.children.isEmpty()) {
+                for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                    entry.getValue().resetNumChildLocks(transactionContext);
+                }
+            }
+        }
+    }
     /**
      * Gets the type of lock that the transaction has at this level, either implicitly
      * (e.g. explicit S lock at higher level implies S lock at this level) or explicitly.

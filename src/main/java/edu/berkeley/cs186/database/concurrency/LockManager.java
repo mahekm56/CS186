@@ -450,6 +450,9 @@ public class LockManager {
             }else{
                 if(resourceEntry != null) {
                     resourceEntry.grantOrUpdateLock(txnLock);
+                    // update this.transactions
+                    this.transactionLocks.get(transaction.getTransNum()).remove(new Lock(name, currLockType, transaction.getTransNum()));
+                    this.transactionLocks.get(transaction.getTransNum()).add(txnLock);
                 }
             }
         }
