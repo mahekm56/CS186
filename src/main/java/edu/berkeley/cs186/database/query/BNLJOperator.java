@@ -70,7 +70,12 @@ class BNLJOperator extends JoinOperator {
             this.leftRecordIterator = BNLJOperator.this.getBlockIterator(this.getLeftTableName(), this.leftIterator,
                     numBuffers-2);
             this.leftRecordIterator.markNext();
-            this.leftRecord = this.leftRecordIterator.next();
+            if(this.leftRecordIterator.hasNext()) {
+                this.leftRecord = this.leftRecordIterator.next();
+            }else {
+                this.nextRecord = null;
+                return;
+            }
 
             this.rightIterator = BNLJOperator.this.getPageIterator(this.getRightTableName());
             this.rightIterator.markNext();
@@ -136,7 +141,10 @@ class BNLJOperator extends JoinOperator {
 
         private void resetRightRecordIterator() {
             this.rightRecordIterator.reset();
-            assert (this.rightRecordIterator.hasNext());
+            if(!this.rightRecordIterator.hasNext()) {
+                this.nextRecord = null;
+                return;
+            }
         }
 
         /**

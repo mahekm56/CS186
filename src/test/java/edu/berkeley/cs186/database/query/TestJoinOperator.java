@@ -568,4 +568,95 @@ public class TestJoinOperator {
             assertEquals("too few records", 4 * 200 * 200, count);
         }
     }
+
+    @Test
+    @Category(PublicTests.class)
+    public void testEmptyBNLJ() {
+        d.setWorkMem(4); // B=4
+        try(Transaction transaction = d.beginTransaction()) {
+            Record r1 = TestUtils.createRecordWithAllTypesWithValue(1);
+            List<DataBox> r1Vals = r1.getValues();
+            Record r2 = TestUtils.createRecordWithAllTypesWithValue(2);
+            List<DataBox> r2Vals = r2.getValues();
+            Record r3 = TestUtils.createRecordWithAllTypesWithValue(3);
+            List<DataBox> r3Vals = r3.getValues();
+            Record r4 = TestUtils.createRecordWithAllTypesWithValue(4);
+            List<DataBox> r4Vals = r4.getValues();
+
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "leftTable");
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "rightTable");
+            for (int i = 0; i < 2 * 400; i++) {
+                if (i < 200) {
+                    transaction.getTransactionContext().addRecord("rightTable", r3Vals);
+                } else if (i < 400) {
+                    transaction.getTransactionContext().addRecord("rightTable", r4Vals);
+                } else if (i < 600) {
+                    transaction.getTransactionContext().addRecord("rightTable", r1Vals);
+                } else {
+                    transaction.getTransactionContext().addRecord("rightTable", r2Vals);
+                }
+            }
+
+            setSourceOperators(
+                    new SequentialScanOperator(transaction.getTransactionContext(), "leftTable"),
+                    new SequentialScanOperator(transaction.getTransactionContext(), "rightTable")
+            );
+
+            startCountIOs();
+
+            QueryOperator joinOperator = new BNLJOperator(leftSourceOperator, rightSourceOperator, "int", "int",
+                    transaction.getTransactionContext());
+            checkIOs(0);
+
+            Iterator<Record> outputIterator = joinOperator.iterator();
+            checkIOs(0);
+
+            assertFalse("there should be no record", outputIterator.hasNext());
+        }
+    }
+
+    @Test
+    @Category(PublicTests.class)
+    public void testEmptyBNLJV2() {
+        d.setWorkMem(4); // B=4
+        try(Transaction transaction = d.beginTransaction()) {
+            Record r1 = TestUtils.createRecordWithAllTypesWithValue(1);
+            List<DataBox> r1Vals = r1.getValues();
+            Record r2 = TestUtils.createRecordWithAllTypesWithValue(2);
+            List<DataBox> r2Vals = r2.getValues();
+            Record r3 = TestUtils.createRecordWithAllTypesWithValue(3);
+            List<DataBox> r3Vals = r3.getValues();
+            Record r4 = TestUtils.createRecordWithAllTypesWithValue(4);
+            List<DataBox> r4Vals = r4.getValues();
+
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "leftTable");
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "rightTable");
+            for (int i = 0; i < 2 * 400; i++) {
+                if (i < 200) {
+                    transaction.getTransactionContext().addRecord("rightTable", r3Vals);
+                } else if (i < 400) {
+                    transaction.getTransactionContext().addRecord("rightTable", r4Vals);
+                } else if (i < 600) {
+                    transaction.getTransactionContext().addRecord("rightTable", r1Vals);
+                } else {
+                    transaction.getTransactionContext().addRecord("rightTable", r2Vals);
+                }
+            }
+
+            setSourceOperators(
+                    new SequentialScanOperator(transaction.getTransactionContext(), "rightTable"),
+                    new SequentialScanOperator(transaction.getTransactionContext(), "leftTable")
+            );
+
+            startCountIOs();
+
+            QueryOperator joinOperator = new BNLJOperator(leftSourceOperator, rightSourceOperator, "int", "int",
+                    transaction.getTransactionContext());
+            checkIOs(0);
+
+            Iterator<Record> outputIterator = joinOperator.iterator();
+
+            assertFalse("there should be no record", outputIterator.hasNext());
+        }
+    }
 }

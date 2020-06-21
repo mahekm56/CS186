@@ -174,9 +174,10 @@ public class LockContext {
      */
     public void promote(TransactionContext transaction, LockType newLockType)
     throws DuplicateLockRequestException, NoLockHeldException, InvalidLockException {
-        // TODO(proj4_part2): implement
+        this.checkReadOnly(transaction);
+        // DuplicateLockRequestException & NoLockHeldException will be checked in Lock Manager
+        // All need to do is check InvalidLockException(Lock Manager also check part of it)
 
-        return;
     }
 
     /**
@@ -215,8 +216,16 @@ public class LockContext {
         if (transaction == null) {
             return LockType.NL;
         }
-        // TODO(proj4_part2): implement
-        return LockType.NL;
+        LockType explicitLockType = this.getExplicitLockType(transaction);
+        if(explicitLockType == LockType.NL) {
+            explicitLockType = this.parent.getEffectiveLockType(transaction);
+            if(explicitLockType == LockType.IX || explicitLockType == LockType.IS) {
+                explicitLockType = LockType.NL;
+            }else if(explicitLockType == LockType.SIX) {
+                explicitLockType = LockType.S;
+            }
+        }
+        return explicitLockType;
     }
 
     /**
@@ -267,8 +276,7 @@ public class LockContext {
         if (transaction == null) {
             return LockType.NL;
         }
-        // TODO(proj4_part2): implement
-        return LockType.NL;
+        return this.lockman.getLockType(transaction, this.getResourceName());
     }
 
     /**
