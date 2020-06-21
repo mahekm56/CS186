@@ -760,9 +760,5 @@ public class TestLockManager {
 
         runner.joinAll();
     }
-
-    /**
-     * developer added tests
-     */
 }
 
