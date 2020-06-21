@@ -3,7 +3,9 @@ package edu.berkeley.cs186.database.query;
 import java.util.*;
 
 import edu.berkeley.cs186.database.TransactionContext;
+import edu.berkeley.cs186.database.common.iterator.ArrayBacktrackingIterator;
 import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
+import edu.berkeley.cs186.database.common.iterator.EmptyBacktrackingIterator;
 import edu.berkeley.cs186.database.databox.DataBox;
 import edu.berkeley.cs186.database.table.Record;
 
@@ -48,27 +50,28 @@ class SortMergeOperator extends JoinOperator {
         * You should implement the solution that's best for you, using any member variables you need.
         * You're free to use these member variables, but you're not obligated to.
         */
-        private final BacktrackingIterator<Record> leftIterator;
-        private final BacktrackingIterator<Record> rightIterator;
+        private BacktrackingIterator<Record> leftIterator;
+        private BacktrackingIterator<Record> rightIterator;
         private Record leftRecord;
         private Record nextRecord;
 
         private SortMergeIterator() {
             super();
-            // sort left and right and get their iterator
-            SortOperator sortedLeft = new SortOperator(getTransaction(), getLeftTableName(), new LeftRecordComparator());
-            String sortedLeftTableName = sortedLeft.sort();
-            this.leftIterator = getRecordIterator(sortedLeftTableName);
-            this.leftRecord = this.leftIterator.next();
 
-            SortOperator sortedRight = new SortOperator(getTransaction(), getRightTableName(), new RightRecordComparator());
-            String sortedRightTableName = sortedRight.sort();
-            this.rightIterator = getRecordIterator(sortedRightTableName);
-            this.rightIterator.markNext();
+            try {
+                // sort left and right and get their iterator
+                SortOperator sortedLeft = new SortOperator(getTransaction(), getLeftTableName(), new LeftRecordComparator());
+                String sortedLeftTableName = sortedLeft.sort();
+                this.leftIterator = getRecordIterator(sortedLeftTableName);
+                this.leftRecord = this.leftIterator.next();
 
-            try{
+                SortOperator sortedRight = new SortOperator(getTransaction(), getRightTableName(), new RightRecordComparator());
+                String sortedRightTableName = sortedRight.sort();
+                this.rightIterator = getRecordIterator(sortedRightTableName);
+                this.rightIterator.markNext();
+
                 fetchNextRecord();
-            }catch (NoSuchElementException e) {
+            }catch (NoSuchElementException | UnsupportedOperationException e) {
                 this.nextRecord = null;
             }
         }

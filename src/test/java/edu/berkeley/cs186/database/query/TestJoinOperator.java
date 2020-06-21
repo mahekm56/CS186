@@ -569,6 +569,9 @@ public class TestJoinOperator {
         }
     }
 
+    /**
+     * developer added tests
+     */
     @Test
     @Category(PublicTests.class)
     public void testEmptyBNLJ() {
@@ -657,6 +660,66 @@ public class TestJoinOperator {
             Iterator<Record> outputIterator = joinOperator.iterator();
 
             assertFalse("there should be no record", outputIterator.hasNext());
+        }
+    }
+
+    @Test
+    @Category(PublicTests.class)
+    public void testEmptySortMergeJoin() {
+        d.setWorkMem(3); // B=3
+        try(Transaction transaction = d.beginTransaction()) {
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "leftTable");
+            transaction.createTable(TestUtils.createSchemaWithAllTypes(), "rightTable");
+            Record r1 = TestUtils.createRecordWithAllTypesWithValue(1);
+            Record r2 = TestUtils.createRecordWithAllTypesWithValue(2);
+            Record r3 = TestUtils.createRecordWithAllTypesWithValue(3);
+            Record r4 = TestUtils.createRecordWithAllTypesWithValue(4);
+
+            List<Record> leftTableRecords = new ArrayList<>();
+            List<Record> rightTableRecords = new ArrayList<>();
+            for (int i = 0; i < 400 * 2; i++) {
+                Record r;
+                if (i % 4 == 0) {
+                    r = r1;
+                } else if (i % 4 == 1) {
+                    r = r2;
+                } else if (i % 4 == 2) {
+                    r = r3;
+                } else {
+                    r = r4;
+                }
+                leftTableRecords.add(r);
+                rightTableRecords.add(r);
+            }
+            Collections.shuffle(leftTableRecords, new Random(10));
+            Collections.shuffle(rightTableRecords, new Random(20));
+            for (int i = 0; i < 400 * 2; i++) {
+                transaction.getTransactionContext().addRecord("rightTable", rightTableRecords.get(i).getValues());
+            }
+
+            setSourceOperators(
+                    new SequentialScanOperator(transaction.getTransactionContext(), "leftTable"),
+                    new SequentialScanOperator(transaction.getTransactionContext(), "rightTable")
+            );
+
+            startCountIOs();
+
+            JoinOperator joinOperator = new SortMergeOperator(leftSourceOperator, rightSourceOperator, "int",
+                    "int",
+                    transaction.getTransactionContext());
+            checkIOs(0);
+            Iterator<Record> outputIterator = joinOperator.iterator();
+            checkIOs(0);
+
+            assertFalse("should be no record", outputIterator.hasNext());
+
+            joinOperator = new SortMergeOperator(rightSourceOperator, leftSourceOperator, "int",
+                    "int",
+                    transaction.getTransactionContext());
+            checkIOs(0);
+            outputIterator = joinOperator.iterator();
+            assertFalse("should be no record", outputIterator.hasNext());
+
         }
     }
 }

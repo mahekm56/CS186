@@ -167,9 +167,12 @@ public class SortOperator {
      * using numBuffers.
      * Returns the name of the table that backs the final run.
      */
-    public String sort() {
+    public String sort() throws UnsupportedOperationException{
         // according to numBuffers could calculate the number of runs
         int pagesNum = getNumPages(this.tableName);
+        if(pagesNum < 1) {
+            throw new UnsupportedOperationException("table is empty");
+        }
         int runNum = pagesNum/this.numBuffers + (pagesNum%this.numBuffers == 0 ? 0 : 1);
 
         // get iterator of this table
