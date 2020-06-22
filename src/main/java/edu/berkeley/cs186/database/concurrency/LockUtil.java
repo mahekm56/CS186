@@ -23,7 +23,50 @@ public class LockUtil {
         if(transaction == null) {
             return;
         }
+        LockType currLockType = lockContext.getExplicitLockType(transaction);
+        // when the lock type already held bu the current txn, do nothing
+        if(currLockType == lockType) {
+            return;
+        }
+        // when require to release this lock
+        if(lockType == LockType.NL) {
+            lockContext.release(transaction);
+            return;
+        }
+        /**
+         * By escalate to get hold lock:
+         * 1) hold lock itself
+         * 2) to escalate->S, children mustn't have X
+         * 3) to escalate->X, children must have X
+         */
+        if(currLockType != LockType.NL) {
+            boolean hasXDesc = lockContext.hasXDescendants(transaction);
+            if((hasXDesc && lockType == LockType.X) || (!hasXDesc && lockType == LockType.S)) {
+                lockContext.escalate(transaction);
+                return;
+            }
+            if(hasXDesc && lockType == LockType.S) {
+                lockType = LockType.SIX;
+            }
+        }
+
+        updateNotNLLock(lockContext, lockType, currLockType);
     }
 
-    // TODO(proj4_part2): add helper methods as you see fit
+    private static void updateNotNLLock(LockContext lockContext, LockType lockType, LockType currLockType) {
+        TransactionContext transaction = TransactionContext.getTransaction(); // current transaction
+        if(lockContext.parentContext() != null) {
+            LockContext parentLockContext = lockContext.parentContext();
+            LockType parentLockType = parentLockContext.getExplicitLockType(transaction);
+            if (!LockType.canBeParentLock(parentLockType, lockType)) {
+                LockType expectedParentLockType = LockType.parentLock(lockType);
+                updateNotNLLock(parentLockContext, expectedParentLockType, parentLockType);
+            }
+        }
+        if(currLockType == LockType.NL) {
+            lockContext.acquire(transaction, lockType);
+        }else if(LockType.substitutable(lockType, currLockType)) {
+            lockContext.promote(transaction, lockType);
+        }
+    }
 }

@@ -189,16 +189,15 @@ public class LockContext {
                     transaction.getTransNum(), this.name));
         }
 
-        this.lockman.promote(transaction, this.getResourceName(), newLockType);
         if(newLockType == LockType.SIX) {
             List<ResourceName> resourceNames = this.sisDescendants(transaction);
             if(!resourceNames.isEmpty()) {
                 this.updateNumChildLocks(transaction);
-
-                for(ResourceName resourceName : resourceNames) {
-                    this.lockman.release(transaction, resourceName);
-                }
             }
+            resourceNames.add(this.getResourceName());
+            this.lockman.acquireAndRelease(transaction, this.getResourceName(),newLockType, resourceNames);
+        }else{
+            this.lockman.promote(transaction, this.getResourceName(), newLockType);
         }
     }
 
@@ -457,6 +456,19 @@ public class LockContext {
             return 0.0;
         }
         return ((double) numChildLocks.getOrDefault(transaction.getTransNum(), 0)) / capacity();
+    }
+
+    public boolean hasXDescendants(TransactionContext transaction) {
+        if(this.children != null && !this.children.isEmpty()) {
+            for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                ResourceName name = entry.getValue().getResourceName();
+                LockType lockType = this.lockman.getLockType(transaction, name);
+                if(lockType == LockType.X || entry.getValue().hasXDescendants(transaction)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
