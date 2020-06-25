@@ -28,30 +28,33 @@ public class LockUtil {
         if(currLockType == lockType) {
             return;
         }
-        // when require to release this lock
-        if(lockType == LockType.NL) {
-            lockContext.release(transaction);
-            return;
-        }
-        /**
-         * By escalate to get hold lock:
-         * 1) hold lock itself
-         * 2) to escalate->S, children mustn't have X
-         * 3) to escalate->X, children must have X
-         */
-        currLockType = lockContext.getExplicitLockType(transaction);
-        if(currLockType != LockType.NL) {
-            boolean hasXDesc = lockContext.hasXDescendants(transaction);
-            if((hasXDesc && lockType == LockType.X) || (!hasXDesc && lockType == LockType.S)) {
-                lockContext.escalate(transaction);
+        try {
+            // when require to release this lock
+            if(lockType == LockType.NL) {
+                lockContext.release(transaction);
                 return;
             }
-            if(hasXDesc && lockType == LockType.S) {
-                lockType = LockType.SIX;
+            /**
+             * By escalate to get hold lock:
+             * 1) hold lock itself
+             * 2) to escalate->S, children mustn't have X
+             * 3) to escalate->X, children must have X
+             */
+            currLockType = lockContext.getExplicitLockType(transaction);
+            if(currLockType != LockType.NL) {
+                boolean hasXDesc = lockContext.hasXDescendants(transaction);
+                if((hasXDesc && lockType == LockType.X) || (!hasXDesc && lockType == LockType.S)) {
+                    lockContext.escalate(transaction);
+                    return;
+                }
+                if(hasXDesc && lockType == LockType.S) {
+                    lockType = LockType.SIX;
+                }
             }
-        }
 
-        updateNotNLLock(lockContext, lockType, currLockType);
+            updateNotNLLock(lockContext, lockType, currLockType);
+        }catch (UnsupportedOperationException ignored){
+        }
     }
 
     private static void updateNotNLLock(LockContext lockContext, LockType lockType, LockType currLockType) {
