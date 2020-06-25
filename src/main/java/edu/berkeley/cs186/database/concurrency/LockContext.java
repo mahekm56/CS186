@@ -330,7 +330,7 @@ public class LockContext {
             return LockType.NL;
         }
         LockType explicitLockType = this.getExplicitLockType(transaction);
-        if(explicitLockType == LockType.NL) {
+        if(explicitLockType == LockType.NL && this.parent != null) {
             explicitLockType = this.parent.getEffectiveLockType(transaction);
             if(explicitLockType == LockType.IX || explicitLockType == LockType.IS) {
                 explicitLockType = LockType.NL;
@@ -469,6 +469,10 @@ public class LockContext {
             }
         }
         return false;
+    }
+
+    public Map<Long, LockContext> getChildrenInMap() {
+        return this.children;
     }
 
     public List<LockContext> getChildren() {

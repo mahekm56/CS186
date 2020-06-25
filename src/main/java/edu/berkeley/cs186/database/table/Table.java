@@ -2,6 +2,7 @@ package edu.berkeley.cs186.database.table;
 
 import java.util.*;
 
+import edu.berkeley.cs186.database.Database;
 import edu.berkeley.cs186.database.DatabaseException;
 import edu.berkeley.cs186.database.common.iterator.*;
 import edu.berkeley.cs186.database.common.Bits;
@@ -118,7 +119,7 @@ public class Table implements BacktrackingIterable<Record> {
      * new table will be created if none exists on the heapfile.
      */
     public Table(String name, Schema schema, HeapFile heapFile, LockContext lockContext) {
-        // TODO(proj4_part3): table locking code
+        LockUtil.ensureSufficientLockHeld(lockContext, LockType.S);
 
         this.name = name;
         this.heapFile = heapFile;
@@ -313,6 +314,7 @@ public class Table implements BacktrackingIterable<Record> {
      */
     public synchronized Record updateRecord(List<DataBox> values, RecordId rid) {
         // TODO(proj4_part3): modify for smarter locking
+        LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(rid.getPageNum()), LockType.X);
 
         validateRecordId(rid);
 
@@ -338,9 +340,9 @@ public class Table implements BacktrackingIterable<Record> {
      */
     public synchronized Record deleteRecord(RecordId rid) {
         // TODO(proj4_part3): modify for smarter locking
+        LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(rid.getPageNum()), LockType.X);
 
         validateRecordId(rid);
-
         Page page = fetchPage(rid.getPageNum());
         try {
             Record record = getRecord(rid);
@@ -451,7 +453,7 @@ public class Table implements BacktrackingIterable<Record> {
     // Iterators /////////////////////////////////////////////////////////////////
     public BacktrackingIterator<RecordId> ridIterator() {
         // TODO(proj4_part3): reduce locking overhead for table scans
-
+        LockUtil.ensureSufficientLockHeld(this.lockContext, LockType.S);
         BacktrackingIterator<Page> iter = heapFile.iterator();
         return new ConcatBacktrackingIterator<>(new PageIterator(iter, false));
     }

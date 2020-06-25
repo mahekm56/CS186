@@ -23,7 +23,7 @@ public class LockUtil {
         if(transaction == null) {
             return;
         }
-        LockType currLockType = lockContext.getExplicitLockType(transaction);
+        LockType currLockType = lockContext.getEffectiveLockType(transaction);
         // when the lock type already held bu the current txn, do nothing
         if(currLockType == lockType) {
             return;
@@ -39,6 +39,7 @@ public class LockUtil {
          * 2) to escalate->S, children mustn't have X
          * 3) to escalate->X, children must have X
          */
+        currLockType = lockContext.getExplicitLockType(transaction);
         if(currLockType != LockType.NL) {
             boolean hasXDesc = lockContext.hasXDescendants(transaction);
             if((hasXDesc && lockType == LockType.X) || (!hasXDesc && lockType == LockType.S)) {

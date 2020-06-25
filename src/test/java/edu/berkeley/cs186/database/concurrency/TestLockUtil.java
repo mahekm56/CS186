@@ -146,5 +146,16 @@ public class TestLockUtil {
         assertEquals(Collections.emptyList(), lockManager.log);
     }
 
+    /**
+     * developer added
+     */
+    @Test
+    @Category(PublicTests.class)
+    public void testTableSPageWithoutS() {
+        LockUtil.ensureSufficientLockHeld(tableContext, LockType.S);
+        lockManager.startLog();
+        LockUtil.ensureSufficientLockHeld(pageContexts[3], LockType.S);
+        assertEquals(Collections.emptyList(), lockManager.log);
+    }
 }
 

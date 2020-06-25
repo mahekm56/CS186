@@ -6,9 +6,7 @@ import edu.berkeley.cs186.database.common.iterator.BacktrackingIterator;
 import edu.berkeley.cs186.database.common.Buffer;
 import edu.berkeley.cs186.database.common.iterator.ConcatBacktrackingIterator;
 import edu.berkeley.cs186.database.common.iterator.IndexBacktrackingIterator;
-import edu.berkeley.cs186.database.concurrency.LockContext;
-import edu.berkeley.cs186.database.concurrency.LockType;
-import edu.berkeley.cs186.database.concurrency.LockUtil;
+import edu.berkeley.cs186.database.concurrency.*;
 import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.io.PageException;
 import edu.berkeley.cs186.database.memory.BufferManager;
@@ -120,6 +118,8 @@ public class PageDirectory implements HeapFile {
         }
 
         Page page = this.firstHeader.loadPageWithSpace(requiredSpace);
+
+        LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(page.getPageNum()), LockType.X);
 
         return new DataPage(pageDirectoryId, page);
     }
