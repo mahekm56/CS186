@@ -471,6 +471,16 @@ public class LockContext {
         return false;
     }
 
+    public List<LockContext> getChildren() {
+        List<LockContext> lockContexts = new ArrayList<>();
+        if(this.children != null && !this.children.isEmpty()) {
+            for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                lockContexts.add(entry.getValue());
+            }
+        }
+        return lockContexts;
+    }
+
     @Override
     public String toString() {
         return "LockContext(" + name.toString() + ")";

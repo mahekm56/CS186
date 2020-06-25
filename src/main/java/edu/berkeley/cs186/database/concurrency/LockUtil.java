@@ -67,6 +67,9 @@ public class LockUtil {
             lockContext.acquire(transaction, lockType);
         }else if(LockType.substitutable(lockType, currLockType)) {
             lockContext.promote(transaction, lockType);
+        }else{
+            lockContext.release(transaction);
+            lockContext.acquire(transaction, lockType);
         }
     }
 }

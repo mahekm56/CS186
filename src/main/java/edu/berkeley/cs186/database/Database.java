@@ -1054,8 +1054,42 @@ public class Database implements AutoCloseable {
 
         @Override
         public void close() {
-            // TODO(proj4_part3): release locks held by the transaction
-            return;
+            List<Lock> locks = Database.this.lockManager.getLocks(this);
+            Set<LockContext> lockContexts = new HashSet<>();
+            if(locks != null && !locks.isEmpty()) {
+                for(Lock lock : locks) {
+                    lockContexts.add(LockContext.fromResourceName(Database.this.lockManager, lock.name));
+                }
+                // find database lock context
+                LockContext rootLockContext = null;
+                for(LockContext lockContext : lockContexts) {
+                    if(lockContext.parentContext() == null) {
+                        rootLockContext = lockContext;
+                    }
+                }
+                // find the root of "lock tree"
+                // BFS + Stack
+                Stack<LockContext> stack = new Stack<>();
+                Queue<LockContext> queue = new ArrayDeque<>();
+                queue.add(rootLockContext);
+                while(!queue.isEmpty()) {
+                    LockContext currLockContext = queue.poll();
+                    stack.push(currLockContext);
+                    List<LockContext> children = currLockContext.getChildren();
+                    if(children != null && !children.isEmpty()) {
+                        for(LockContext lockContext : children) {
+                            if(lockContexts.contains(lockContext)) {
+                                queue.add(lockContext);
+                            }
+                        }
+                    }
+                }
+                // stack already contains reorder of locks
+                while(!stack.empty()) {
+                    LockContext releaseLockContext = stack.pop();
+                    releaseLockContext.release(this);
+                }
+            }
         }
 
         @Override
