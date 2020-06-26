@@ -26,6 +26,8 @@ import edu.berkeley.cs186.database.recovery.*;
 import edu.berkeley.cs186.database.table.*;
 import edu.berkeley.cs186.database.table.stats.TableStats;
 
+import javax.xml.crypto.Data;
+
 @SuppressWarnings("unused")
 public class Database implements AutoCloseable {
     private static final String METADATA_TABLE_PREFIX = "information_schema.";
@@ -1151,7 +1153,9 @@ public class Database implements AutoCloseable {
             }
 
             // TODO(proj4_part3): add locking
+            lockTableMetadata(tableName, LockType.NL);
             TableInfoRecord record = getTableMetadata(tableName);
+            LockUtil.ensureSufficientLockHeld(getTableInfoContext().getChildrenInMap().get(record.pageNum), LockType.X);
             if (!record.isAllocated()) {
                 throw new DatabaseException("no table with name " + tableName);
             }
@@ -1231,7 +1235,7 @@ public class Database implements AutoCloseable {
             try {
                 // TODO(proj4_part3): add locking
 
-                lockTableMetadata(prefixedTableName, LockType.NL);
+                lockTableMetadata(prefixedTableName, LockType.X);
 
                 TableInfoRecord record = getTableMetadata(prefixedTableName);
                 if (record.isAllocated()) {
@@ -1243,7 +1247,7 @@ public class Database implements AutoCloseable {
                 record.isTemporary = false;
                 record.schema = s;
                 // added by developer
-                lockTableMetadata(prefixedTableName, LockType.X);
+                // lockTableMetadata(prefixedTableName, LockType.X);
 
                 tableInfo.updateRecord(record.toDataBox(), tableInfoLookup.get(prefixedTableName));
                 // added by developer
