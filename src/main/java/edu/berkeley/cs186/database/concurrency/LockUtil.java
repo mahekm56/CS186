@@ -20,9 +20,10 @@ public class LockUtil {
      */
     public static void ensureSufficientLockHeld(LockContext lockContext, LockType lockType) {
         TransactionContext transaction = TransactionContext.getTransaction(); // current transaction
-        if(transaction == null) {
+        if(transaction == null || lockContext == null) {
             return;
         }
+
         LockType currLockType = lockContext.getEffectiveLockType(transaction);
         // when the lock type already held bu the current txn, do nothing
         if(LockType.substitutable(currLockType, lockType)) {
