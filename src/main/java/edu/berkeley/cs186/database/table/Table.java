@@ -4,9 +4,11 @@ import java.util.*;
 
 import edu.berkeley.cs186.database.Database;
 import edu.berkeley.cs186.database.DatabaseException;
+import edu.berkeley.cs186.database.TransactionContext;
 import edu.berkeley.cs186.database.common.iterator.*;
 import edu.berkeley.cs186.database.common.Bits;
 import edu.berkeley.cs186.database.common.Buffer;
+import edu.berkeley.cs186.database.concurrency.Lock;
 import edu.berkeley.cs186.database.concurrency.LockContext;
 import edu.berkeley.cs186.database.concurrency.LockType;
 import edu.berkeley.cs186.database.concurrency.LockUtil;
@@ -112,6 +114,8 @@ public class Table implements BacktrackingIterable<Record> {
     // The lock context of the table.
     private LockContext lockContext;
 
+    private boolean autoEscalateEnabled;
+
     // Constructors //////////////////////////////////////////////////////////////
     /**
      * Load a table named `name` with schema `schema` from `heapFile`. `lockContext`
@@ -149,6 +153,15 @@ public class Table implements BacktrackingIterable<Record> {
         }
 
         this.lockContext = lockContext;
+
+        this.autoEscalateEnabled = true;
+    }
+
+    /**
+     * author: Hao-Ling.Ding
+     */
+    public boolean isAutoEscalateEnabled() {
+        return this.autoEscalateEnabled;
     }
 
     // Accessors /////////////////////////////////////////////////////////////////
@@ -289,6 +302,9 @@ public class Table implements BacktrackingIterable<Record> {
      * exists.
      */
     public synchronized Record getRecord(RecordId rid) {
+        if(this.isAutoEscalateEnabled() && this.shouldAutoEscacate(LockType.S)) {
+            LockUtil.ensureSufficientLockHeld(this.lockContext, LockType.S);
+        }
         validateRecordId(rid);
         Page page = fetchPage(rid.getPageNum());
         try {
@@ -307,14 +323,31 @@ public class Table implements BacktrackingIterable<Record> {
         }
     }
 
+    private boolean shouldAutoEscacate(LockType lockType) {
+        TransactionContext transactionContext = TransactionContext.getTransaction();
+        if(transactionContext != null) {
+            int capacity = this.lockContext.capacity();
+            int heldPages = this.lockContext.getChildrenNumber(transactionContext, lockType);
+            return capacity >= 10 && heldPages >= capacity * 0.2;
+        }
+        return false;
+    }
+
     /**
      * Overwrites an existing record with new values and returns the existing
      * record. stats is updated accordingly. An exception is thrown if rid does
      * not correspond to an existing record in the table.
      */
     public synchronized Record updateRecord(List<DataBox> values, RecordId rid) {
-        // TODO(proj4_part3): modify for smarter locking
-        LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(rid.getPageNum()), LockType.X);
+        if(this.isAutoEscalateEnabled() && this.shouldAutoEscacate(LockType.S)) {
+            LockUtil.ensureSufficientLockHeld(this.lockContext, LockType.S);
+        }
+
+        if(this.isAutoEscalateEnabled() && this.shouldAutoEscacate(LockType.X)) {
+            LockUtil.ensureSufficientLockHeld(this.lockContext, LockType.X);
+        }else{
+            LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(rid.getPageNum()), LockType.X);
+        }
 
         validateRecordId(rid);
 
@@ -339,8 +372,15 @@ public class Table implements BacktrackingIterable<Record> {
      * if rid does not correspond to an existing record in the table.
      */
     public synchronized Record deleteRecord(RecordId rid) {
-        // TODO(proj4_part3): modify for smarter locking
-        LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(rid.getPageNum()), LockType.X);
+        if(this.isAutoEscalateEnabled() && this.shouldAutoEscacate(LockType.S)) {
+            LockUtil.ensureSufficientLockHeld(this.lockContext, LockType.S);
+        }
+
+        if(this.isAutoEscalateEnabled() && this.shouldAutoEscacate(LockType.X)) {
+            LockUtil.ensureSufficientLockHeld(this.lockContext, LockType.X);
+        }else{
+            LockUtil.ensureSufficientLockHeld(this.lockContext.getChildrenInMap().get(rid.getPageNum()), LockType.X);
+        }
 
         validateRecordId(rid);
         Page page = fetchPage(rid.getPageNum());
@@ -439,7 +479,7 @@ public class Table implements BacktrackingIterable<Record> {
      * has at least 10 pages should escalate to a table-level lock before any locks are requested.
      */
     public void enableAutoEscalate() {
-        // TODO(proj4_part3): implement
+        this.autoEscalateEnabled = true;
     }
 
     /**
@@ -447,7 +487,7 @@ public class Table implements BacktrackingIterable<Record> {
      * an automatic escalation to a table-level lock.
      */
     public void disableAutoEscalate() {
-        // TODO(proj4_part3): implement
+        this.autoEscalateEnabled = false;
     }
 
     // Iterators /////////////////////////////////////////////////////////////////

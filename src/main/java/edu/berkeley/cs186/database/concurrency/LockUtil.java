@@ -25,7 +25,7 @@ public class LockUtil {
         }
         LockType currLockType = lockContext.getEffectiveLockType(transaction);
         // when the lock type already held bu the current txn, do nothing
-        if(currLockType == lockType) {
+        if(LockType.substitutable(currLockType, lockType)) {
             return;
         }
         try {
@@ -34,21 +34,16 @@ public class LockUtil {
                 lockContext.release(transaction);
                 return;
             }
-            /**
-             * By escalate to get hold lock:
-             * 1) hold lock itself
-             * 2) to escalate->S, children mustn't have X
-             * 3) to escalate->X, children must have X
-             */
+             /*By escalate to get hold lock:
+             1) hold lock itself
+             2) to escalate->S, children mustn't have X
+             3) to escalate->X, children must have X*/
             currLockType = lockContext.getExplicitLockType(transaction);
             if(currLockType != LockType.NL) {
                 boolean hasXDesc = lockContext.hasXDescendants(transaction);
                 if((hasXDesc && lockType == LockType.X) || (!hasXDesc && lockType == LockType.S)) {
                     lockContext.escalate(transaction);
                     return;
-                }
-                if(hasXDesc && lockType == LockType.S) {
-                    lockType = LockType.SIX;
                 }
             }
 
@@ -72,8 +67,12 @@ public class LockUtil {
         }else if(LockType.substitutable(lockType, currLockType)) {
             lockContext.promote(transaction, lockType);
         }else{
-            lockContext.release(transaction);
-            lockContext.acquire(transaction, lockType);
+            if((lockType == LockType.IX && currLockType == LockType.S) || (lockType == LockType.S && currLockType == LockType.IX)) {
+                lockContext.promote(transaction, LockType.SIX);
+            }else {
+                lockContext.release(transaction);
+                lockContext.acquire(transaction, lockType);
+            }
         }
     }
 }

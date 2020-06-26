@@ -489,5 +489,21 @@ public class LockContext {
     public String toString() {
         return "LockContext(" + name.toString() + ")";
     }
+
+    /**
+     * author: Hao-Ling.Ding
+     */
+    public int getChildrenNumber(TransactionContext transactionContext, LockType lockType) {
+        int res = 0;
+        if(this.children != null && !this.children.isEmpty()) {
+            for(Map.Entry<Long, LockContext> entry : this.children.entrySet()) {
+                LockContext child = entry.getValue();
+                if(child.getExplicitLockType(transactionContext) == lockType) {
+                    res++;
+                }
+            }
+        }
+        return res;
+    }
 }
 

@@ -157,5 +157,25 @@ public class TestLockUtil {
         LockUtil.ensureSufficientLockHeld(pageContexts[3], LockType.S);
         assertEquals(Collections.emptyList(), lockManager.log);
     }
+
+    @Test
+    @Category(PublicTests.class)
+    public void testAutoEscalateForPart3Task6() {
+        lockManager.startLog();
+        LockUtil.ensureSufficientLockHeld(pageContexts[0], LockType.X);
+        LockUtil.ensureSufficientLockHeld(pageContexts[1], LockType.X);
+        LockUtil.ensureSufficientLockHeld(pageContexts[2], LockType.X);
+        LockUtil.ensureSufficientLockHeld(pageContexts[3], LockType.X);
+        LockUtil.ensureSufficientLockHeld(tableContext, LockType.X);
+        assertEquals(Arrays.asList(
+                "acquire 0 database IX",
+                "acquire 0 database/table1 IX",
+                "acquire 0 database/table1/0 X",
+                "acquire 0 database/table1/1 X",
+                "acquire 0 database/table1/2 X",
+                "acquire 0 database/table1/3 X",
+                "acquire-and-release 0 database/table1 X [database/table1, database/table1/0, database/table1/1, database/table1/2, database/table1/3]"
+        ), lockManager.log);
+    }
 }
 
