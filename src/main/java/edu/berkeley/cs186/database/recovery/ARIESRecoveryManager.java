@@ -8,9 +8,9 @@ import edu.berkeley.cs186.database.concurrency.LockType;
 import edu.berkeley.cs186.database.concurrency.LockUtil;
 import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
-import edu.berkeley.cs186.database.memory.Page;
 
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -113,8 +113,16 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     @Override
     public long commit(long transNum) {
-        // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        CommitTransactionLogRecord commitTransactionLogRecord = new CommitTransactionLogRecord(transNum, transactionTableEntry.lastLSN);
+        long currLSN = this.logManager.appendToLog(commitTransactionLogRecord);
+        this.logManager.flushToLSN(currLSN);
+        // update ATT
+        Transaction transaction = transactionTableEntry.transaction;
+        transaction.setStatus(Transaction.Status.COMMITTING);
+        transactionTableEntry.lastLSN = currLSN;
+        this.transactionTable.put(transNum, transactionTableEntry);
+        return currLSN;
     }
 
     /**
@@ -128,8 +136,15 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     @Override
     public long abort(long transNum) {
-        // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        AbortTransactionLogRecord abortTransactionLogRecord = new AbortTransactionLogRecord(transNum, transactionTableEntry.lastLSN);
+        long currLSN = this.logManager.appendToLog(abortTransactionLogRecord);
+        // update ATT
+        Transaction transaction = transactionTableEntry.transaction;
+        transaction.setStatus(Transaction.Status.ABORTING);
+        transactionTableEntry.lastLSN = currLSN;
+        this.transactionTable.put(transNum, transactionTableEntry);
+        return currLSN;
     }
 
     /**
@@ -145,8 +160,33 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     @Override
     public long end(long transNum) {
-        // TODO(proj5): implement
-        return -1L;
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        Transaction transaction = transactionTableEntry.transaction;
+        // 如果transaction is aborting， rollback its changes
+        if(transaction.getStatus() == Transaction.Status.ABORTING) {
+            // roll back changes
+            Optional<Long> lastLSN = Optional.of(transactionTableEntry.lastLSN);
+            while (lastLSN.isPresent() && lastLSN.get() > 0) {
+                LogRecord logRecord = this.logManager.fetchLogRecord(lastLSN.get());
+                if(logRecord.isUndoable()) {
+                    Pair<LogRecord, Boolean> clrPair = logRecord.undo(lastLSN.get());
+                    long currLSN = this.logManager.appendToLog(clrPair.getFirst());
+                    if(clrPair.getSecond()) {
+                        this.logManager.flushToLSN(currLSN);
+                    }
+                    lastLSN = clrPair.getFirst().getUndoNextLSN();
+                }else{
+                    lastLSN = logRecord.getPrevLSN();
+                }
+            }
+        }
+        // remove this transaction from ATT
+        this.transactionTable.remove(transNum);
+        // update transaction status
+        transaction.setStatus(Transaction.Status.COMPLETE);
+        // append a log record
+        EndTransactionLogRecord endTransactionLogRecord = new EndTransactionLogRecord(transNum, transactionTableEntry.lastLSN);
+        return this.logManager.appendToLog(endTransactionLogRecord);
     }
 
     /**
@@ -198,9 +238,52 @@ public class ARIESRecoveryManager implements RecoveryManager {
     public long logPageWrite(long transNum, long pageNum, short pageOffset, byte[] before,
                              byte[] after) {
         assert (before.length == after.length);
-
-        // TODO(proj5): implement
-        return -1L;
+        // 1. 判断 page+offset 处的byte[]是否是before中的content(no need now)
+        // 2. 判断before的length决定是否需要divide into 2 records(an undo-only record followed by a redo-only record)
+        // 3. 生成1～2个UpdatePageLogRecord
+        // 4. update ATT & DPT
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transNum);
+        long prevLSN = transactionTableEntry == null ?  -1 : transactionTableEntry.lastLSN;
+        if(before.length <= BufferManager.EFFECTIVE_PAGE_SIZE / 2) {
+            UpdatePageLogRecord updatePageLogRecord = new UpdatePageLogRecord(transNum, pageNum, prevLSN, pageOffset, before, after);
+            long currLSN = this.logManager.appendToLog(updatePageLogRecord);
+            // update ATT
+            if(transactionTableEntry != null) {
+                transactionTableEntry.lastLSN = currLSN;
+                transactionTableEntry.touchedPages.add(pageNum);
+            }
+            this.transactionTable.put(transNum, transactionTableEntry);
+            // update DPT
+            if(!this.dirtyPageTable.containsKey(pageNum)) {
+                this.dirtyPageTable.put(pageNum, currLSN);
+            }else{
+                long recLSN = this.dirtyPageTable.get(pageNum);
+                if(recLSN > currLSN) {
+                    this.dirtyPageTable.put(pageNum, currLSN);
+                }
+            }
+            return currLSN;
+        }else{
+            UpdatePageLogRecord undoOnlyLogRecord = new UpdatePageLogRecord(transNum, pageNum, prevLSN, pageOffset, before, new byte[0]);
+            long undoOnlyLSN = this.logManager.appendToLog(undoOnlyLogRecord);
+            UpdatePageLogRecord redoOnlyLogRecord = new UpdatePageLogRecord(transNum, pageNum, undoOnlyLSN, pageOffset, new byte[0], after);
+            long redoOnlyLSN = this.logManager.appendToLog(redoOnlyLogRecord);
+            // update ATT
+            if(transactionTableEntry != null) {
+                transactionTableEntry.lastLSN = redoOnlyLSN;
+                transactionTableEntry.touchedPages.add(pageNum);
+            }
+            // update DPT
+            if(!this.dirtyPageTable.containsKey(pageNum)) {
+                this.dirtyPageTable.put(pageNum, undoOnlyLSN);
+            }else{
+                long recLSN = this.dirtyPageTable.get(pageNum);
+                if(recLSN > undoOnlyLSN) {
+                    this.dirtyPageTable.put(pageNum, undoOnlyLSN);
+                }
+            }
+            return redoOnlyLSN;
+        }
     }
 
     /**
@@ -387,9 +470,20 @@ public class ARIESRecoveryManager implements RecoveryManager {
 
         // All of the transaction's changes strictly after the record at LSN should be undone.
         long LSN = transactionEntry.getSavepoint(name);
-
-        // TODO(proj5): implement
-        return;
+        Optional<Long> lastLSN = Optional.of(transactionEntry.lastLSN);
+        while (lastLSN.isPresent() && lastLSN.get() > LSN) {
+            LogRecord logRecord = this.logManager.fetchLogRecord(lastLSN.get());
+            if(logRecord.isUndoable()) {
+                Pair<LogRecord, Boolean> clrPair = logRecord.undo(lastLSN.get());
+                long currLSN = this.logManager.appendToLog(clrPair.getFirst());
+                if(clrPair.getSecond()) {
+                    this.logManager.flushToLSN(currLSN);
+                }
+                lastLSN = clrPair.getFirst().getUndoNextLSN();
+            }else{
+                lastLSN = logRecord.getPrevLSN();
+            }
+        }
     }
 
     /**

@@ -435,6 +435,10 @@ public class TestRecoveryManager {
         assertEquals(new Pair<>(Transaction.Status.RUNNING, LSN1), txnTable.get(1L));
     }
 
+    /**
+     * unit tests for recovery
+     * @throws Exception
+     */
     @Test
     @Category(PublicTests.class)
     public void testRestartAnalysis() throws Exception {
