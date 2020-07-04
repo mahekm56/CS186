@@ -39,6 +39,7 @@ class LogManagerImpl implements LogManager {
     private Page logTail;
     private Buffer logTailBuffer;
     private boolean logTailPinned = false;
+    // last LSN in log on disk
     private long flushedLSN;
 
     private static final int LOG_PARTITION = 0;

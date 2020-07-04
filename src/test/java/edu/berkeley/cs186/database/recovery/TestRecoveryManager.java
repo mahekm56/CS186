@@ -56,6 +56,12 @@ public class TestRecoveryManager {
         recoveryManager.close();
     }
 
+    /**
+     * test transaction operation(commit, abort & end) by logPageWrite
+     * related log type:
+     * CommitTransactionLogRecord, UpdatePageLogRecord
+     * @throws Exception
+     */
     @Test
     @Category(PublicTests.class)
     public void testSimpleCommit() throws Exception {
@@ -114,6 +120,47 @@ public class TestRecoveryManager {
         assertEquals(Transaction.Status.RUNNING, transactionTable.get(2L).transaction.getStatus());
     }
 
+    /**
+     * added by developer
+     * @throws Exception
+     */
+    @Test
+    @Category(PublicTests.class)
+    public void testAbortByStudent() throws Exception {
+        long pageNum = 10000000002L;
+        short pageOffset = 20;
+        short secondPageOffset = 24;
+        byte[] before = new byte[] { (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00 };
+        byte[] after = new byte[] { (byte) 0xBA, (byte) 0xAD, (byte) 0xF0, (byte) 0x0D };
+
+        Map<Long, TransactionTableEntry> transactionTable = getTransactionTable(recoveryManager);
+
+        Transaction transaction1 = DummyTransaction.create(1L);
+        recoveryManager.startTransaction(transaction1);
+
+        recoveryManager.logPageWrite(1L, pageNum, pageOffset, before, after);
+        recoveryManager.logPageWrite(1L, pageNum, secondPageOffset, before, after);
+
+        Transaction transaction2 = DummyTransaction.create(2L);
+        recoveryManager.startTransaction(transaction2);
+
+        recoveryManager.logPageWrite(2L, pageNum + 1, pageOffset, before, after);
+        recoveryManager.logPageWrite(2L, pageNum + 1, secondPageOffset, before, after);
+
+        long LSN = recoveryManager.abort(1L);
+
+        // notice that lastLSN including transaction state record
+        assertEquals(LSN, transactionTable.get(1L).lastLSN);
+        assertEquals(Transaction.Status.ABORTING, transactionTable.get(1L).transaction.getStatus());
+        assertEquals(Transaction.Status.RUNNING, transactionTable.get(2L).transaction.getStatus());
+    }
+
+    /**
+     * related log type:
+     * UpdatePageLogRecord, AllocPartLogRecord, CommitTransactionLogRecord
+     * AbortTransactionLogRecord, EndTransactionLogRecord, UndoUpdatePageLogRecord
+     * @throws Exception
+     */
     @Test
     @Category(PublicTests.class)
     public void testEnd() throws Exception {
@@ -144,6 +191,7 @@ public class TestRecoveryManager {
 
         assertEquals(LSNs[7], transactionTable.get(1L).lastLSN);
         assertEquals(LSNs[6], transactionTable.get(2L).lastLSN);
+        // TODO understand
         assertEquals(LogManagerImpl.maxLSN(LogManagerImpl.getLSNPage(LSNs[6])), logManager.getFlushedLSN());
         assertEquals(Transaction.Status.COMMITTING, transactionTable.get(2L).transaction.getStatus());
 
@@ -205,12 +253,19 @@ public class TestRecoveryManager {
         assertTrue(transactionTable.isEmpty());
 
         // Flushed log tail correct
+        // TODO understand
         assertEquals(LogManagerImpl.maxLSN(LogManagerImpl.getLSNPage(LSNs[6])), logManager.getFlushedLSN());
 
         assertEquals(Transaction.Status.COMPLETE, transaction1.getStatus());
         assertEquals(Transaction.Status.COMPLETE, transaction2.getStatus());
     }
 
+    /**
+     * test logPageWrite(simple & two part)
+     * related log type:
+     * UpdatePageLogRecord
+     * @throws Exception
+     */
     @Test
     @Category(PublicTests.class)
     public void testSimpleLogPageWrite() throws Exception {
@@ -269,6 +324,7 @@ public class TestRecoveryManager {
 
         long secondLSN = recoveryManager.logPageWrite(transaction1.getTransNum(), pageNum, (short) 0,
                          before, after);
+        // TODO why minus 10000L?
         long firstLSN = secondLSN - 10000L; // previous log page, both at start of a log page
 
         LogRecord firstLogRecord = logManager.fetchLogRecord(firstLSN);
@@ -311,6 +367,40 @@ public class TestRecoveryManager {
         assertEquals(Optional.of(1L), clr.getTransNum());
         assertEquals(Optional.of(10000000001L), clr.getPageNum());
         assertTrue(clr.getUndoNextLSN().orElseThrow(NoSuchElementException::new) < LSN);
+    }
+
+    /**
+     * added by developer
+     * @throws Exception
+     */
+    @Test
+    @Category(PublicTests.class)
+    public void testSimpleSavepointByDeveloper() throws Exception {
+        byte[] before = new byte[] { (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00 };
+        byte[] after = new byte[] { (byte) 0xBA, (byte) 0xAD, (byte) 0xF0, (byte) 0x0D };
+
+        LogManager logManager = getLogManager(recoveryManager);
+
+        Transaction transaction1 = DummyTransaction.create(1L);
+        recoveryManager.startTransaction(transaction1);
+        recoveryManager.savepoint(1L, "savepoint 1");
+        long LSN1 = recoveryManager.logPageWrite(1L, 10000000001L, (short) 0, before, after);
+        recoveryManager.savepoint(1L, "savepoint 2");
+        long LSN2 = recoveryManager.logPageWrite(1L, 10000000001L, (short) 4, before, after);
+        recoveryManager.rollbackToSavepoint(1L, "savepoint 2");
+
+        Iterator<LogRecord> iter = logManager.scanFrom(LSN1);
+        iter.next(); // page write record
+        iter.next();
+
+        LogRecord clr = iter.next();
+        assertEquals(LogType.UNDO_UPDATE_PAGE, clr.getType());
+
+        assertEquals((short) 4, ((UndoUpdatePageLogRecord) clr).offset);
+        assertArrayEquals(before, ((UndoUpdatePageLogRecord) clr).after);
+        assertEquals(Optional.of(1L), clr.getTransNum());
+        assertEquals(Optional.of(10000000001L), clr.getPageNum());
+        assertTrue(clr.getUndoNextLSN().orElseThrow(NoSuchElementException::new) < LSN2);
     }
 
     @Test

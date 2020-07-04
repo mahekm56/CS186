@@ -99,6 +99,8 @@ abstract class LogRecord {
 
     /**
      * Gets the dirty page table written to the log record, if applicable.
+     * (PageId, recLSN)
+     * recLSN: oldest LSN since it was last flushed
      */
     public Map<Long, Long> getDirtyPageTable() {
         return Collections.emptyMap();
@@ -106,6 +108,8 @@ abstract class LogRecord {
 
     /**
      * Gets the transaction table written to the log record, if applicable.
+     * (TxnId, (TxnStatus, lastLSN))
+     * lastLSN: latest record of txn Ti
      */
     public Map<Long, Pair<Transaction.Status, Long>> getTransactionTable() {
         return Collections.emptyMap();

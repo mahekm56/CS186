@@ -8,6 +8,7 @@ class TransactionTableEntry {
     // Transaction object for the transaction.
     Transaction transaction;
     // lastLSN of transaction, or 0 if no log entries for the transaction exist.
+    // lastLSN: latest record of current transaction
     long lastLSN = 0;
     // Set of page numbers of all pages this transaction has modified in some way.
     Set<Long> touchedPages = new HashSet<>();

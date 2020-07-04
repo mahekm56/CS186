@@ -37,8 +37,11 @@ public class ARIESRecoveryManager implements RecoveryManager {
     // Log manager
     LogManager logManager;
     // Dirty page table (page number -> recLSN).
+    // recLSN: Oldest update to page since it was last flushed
+    // for Redo stage
     Map<Long, Long> dirtyPageTable = new ConcurrentHashMap<>();
     // Transaction table (transaction number -> entry).
+    // for Undo stage
     Map<Long, TransactionTableEntry> transactionTable = new ConcurrentHashMap<>();
 
     // List of lock requests made during recovery. This is only populated when locking is disabled.
