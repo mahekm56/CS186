@@ -9,6 +9,7 @@ import edu.berkeley.cs186.database.concurrency.LockUtil;
 import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
 
+import javax.swing.text.html.Option;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -647,11 +648,154 @@ public class ARIESRecoveryManager implements RecoveryManager {
         MasterLogRecord masterRecord = (MasterLogRecord) record;
         // Get start checkpoint LSN
         long LSN = masterRecord.lastCheckpointLSN;
-
         // TODO(proj5): implement
-        return;
+        // construct DPT & ATT
+        Iterator<LogRecord> iterator = this.logManager.scanFrom(LSN);
+        while (iterator.hasNext()) {
+            LogRecord logRecord = iterator.next();
+            switch (logRecord.type) {
+                case ALLOC_PAGE:
+                case FREE_PART:
+                case FREE_PAGE:
+                case ALLOC_PART:
+                case UPDATE_PAGE:
+                case UNDO_ALLOC_PAGE:
+                case UNDO_UPDATE_PAGE:
+                case UNDO_FREE_PAGE:
+                case UNDO_ALLOC_PART:
+                case UNDO_FREE_PART:
+                    this.restartAnalysisForTxnOperation(logRecord);
+                    break;
+                case COMMIT_TRANSACTION:
+                case ABORT_TRANSACTION:
+                case END_TRANSACTION:
+                    this.restartAnalysisForTxnStatusChange(logRecord);
+                    break;
+                case BEGIN_CHECKPOINT:
+                    updateTransactionCounter.accept(logRecord.getMaxTransactionNum().get());
+                    break;
+                case END_CHECKPOINT:
+                    this.restartAnalysisForEndCheckpoint(logRecord);
+                    break;
+            }
+        }
+        // Ending Transactions
+        for(Map.Entry<Long, TransactionTableEntry> entry : this.transactionTable.entrySet()) {
+            long transactionNum = entry.getKey();
+            TransactionTableEntry transactionTableEntry = entry.getValue();
+            if(transactionTableEntry.transaction.getStatus() == Transaction.Status.COMMITTING) {
+                transactionTableEntry.transaction.cleanup();
+                transactionTableEntry.transaction.setStatus(Transaction.Status.COMPLETE);
+                EndTransactionLogRecord endTransactionLogRecord = new EndTransactionLogRecord(transactionNum, transactionTableEntry.lastLSN);
+                this.logManager.appendToLog(endTransactionLogRecord);
+                this.transactionTable.remove(transactionNum);
+            }else if(transactionTableEntry.transaction.getStatus() == Transaction.Status.RUNNING) {
+                transactionTableEntry.transaction.setStatus(Transaction.Status.RECOVERY_ABORTING);
+                AbortTransactionLogRecord abortTransactionLogRecord = new AbortTransactionLogRecord(transactionNum, transactionTableEntry.lastLSN);
+                transactionTableEntry.lastLSN = this.logManager.appendToLog(abortTransactionLogRecord);
+            }
+        }
     }
 
+    private void restartAnalysisForTxnOperation(LogRecord logRecord) {
+        long transactionNum = logRecord.getTransNum().get();
+        TransactionTableEntry transactionTableEntry;
+        // get transaction table entry
+        if(!this.transactionTable.containsKey(transactionNum)) {
+            Transaction transaction = newTransaction.apply(transactionNum);
+            transactionTableEntry = new TransactionTableEntry(transaction);
+        }else{
+            transactionTableEntry = this.transactionTable.get(transactionNum);
+        }
+        // update ATT
+        if(transactionTableEntry.lastLSN < logRecord.LSN) {
+            transactionTableEntry.lastLSN = logRecord.LSN;
+        }
+        // if page related
+        if(logRecord.type != LogType.ALLOC_PART && logRecord.type != LogType.FREE_PART
+            && logRecord.type != LogType.UNDO_ALLOC_PART && logRecord.type != LogType.UNDO_FREE_PART) {
+            long pageNum = logRecord.getPageNum().get();
+            if(!transactionTableEntry.touchedPages.contains(pageNum)) {
+                transactionTableEntry.touchedPages.add(pageNum);
+                // request X lock
+                LockContext lockContext = this.getPageLockContext(pageNum);
+                this.acquireTransactionLock(transactionTableEntry.transaction, lockContext, LockType.X);
+            }
+            // update DPT
+            if(logRecord.type == LogType.UPDATE_PAGE || logRecord.type == LogType.UNDO_UPDATE_PAGE) {
+                // UpdatePage/UndoUpdatePage both may dirty a page in memory, without flushing changes to disk.
+                if(!this.dirtyPageTable.containsKey(pageNum) || this.dirtyPageTable.get(pageNum) > logRecord.LSN) {
+                    this.dirtyPageTable.put(pageNum, logRecord.LSN);
+                }
+            }else{
+                // AllocPage/FreePage/UndoAllocPage/UndoFreePage all make their changes visible on disk immediately,
+                // and can be seen as flushing all changes at the time (including their own) to disk
+                this.dirtyPageTable.remove(pageNum);
+            }
+        }
+        this.transactionTable.put(transactionNum, transactionTableEntry);
+
+    }
+
+    private void restartAnalysisForTxnStatusChange(LogRecord logRecord) {
+        long transactionNum = logRecord.getTransNum().get();
+        TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
+        transactionTableEntry.lastLSN = logRecord.LSN;
+        Transaction transaction = transactionTableEntry.transaction;
+        if(logRecord.type == LogType.COMMIT_TRANSACTION) {
+            transaction.setStatus(Transaction.Status.COMMITTING);
+        }else if(logRecord.type == LogType.ABORT_TRANSACTION) {
+            transaction.setStatus(Transaction.Status.RECOVERY_ABORTING);
+        }else{
+            transaction.cleanup();
+            transaction.setStatus(Transaction.Status.COMPLETE);
+            this.transactionTable.remove(transactionNum);
+        }
+
+    }
+
+    private void restartAnalysisForEndCheckpoint(LogRecord logRecord) {
+        if(logRecord.type == LogType.END_CHECKPOINT) {
+            // update DPT
+            for(Map.Entry<Long, Long> entry : logRecord.getDirtyPageTable().entrySet()) {
+                this.dirtyPageTable.put(entry.getKey(), entry.getValue());
+            }
+            // update ATT
+            for(Map.Entry<Long, Pair<Transaction.Status, Long>> entry : logRecord.getTransactionTable().entrySet()) {
+                long transactionNum = entry.getKey();
+                Transaction.Status status = entry.getValue().getFirst();
+                long lastLSN = entry.getValue().getSecond();
+                if(this.transactionTable.containsKey(transactionNum)) {
+                    TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
+                    if(transactionTableEntry.lastLSN < lastLSN) {
+                        transactionTableEntry.lastLSN = lastLSN;
+                        this.transactionTable.put(transactionNum, transactionTableEntry);
+                    }
+                }else {
+                    Transaction transaction = newTransaction.apply(transactionNum);
+                    transaction.setStatus(status);
+                    TransactionTableEntry transactionTableEntry = new TransactionTableEntry(transaction);
+                    transactionTableEntry.lastLSN = lastLSN;
+                    this.transactionTable.put(transactionNum, transactionTableEntry);
+                }
+            }
+            // read touched pages
+            for(Map.Entry<Long, List<Long>> entry : logRecord.getTransactionTouchedPages().entrySet()) {
+                long transactionNum = entry.getKey();
+                List<Long> touchedPages = entry.getValue();
+                TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
+                if(transactionTableEntry.transaction.getStatus() != Transaction.Status.COMPLETE) {
+                    for(Long pageNum : touchedPages) {
+                        if(!transactionTableEntry.touchedPages.contains(pageNum)) {
+                            transactionTableEntry.touchedPages.add(pageNum);
+                            LockContext lockContext = this.getPageLockContext(pageNum);
+                            this.acquireTransactionLock(transactionTableEntry.transaction, lockContext, LockType.X);
+                        }
+                    }
+                }
+            }
+        }
+    }
     /**
      * This method performs the redo pass of restart recovery.
      *
