@@ -3,7 +3,6 @@ package edu.berkeley.cs186.database.recovery;
 import edu.berkeley.cs186.database.TimeoutScaling;
 import edu.berkeley.cs186.database.Transaction;
 import edu.berkeley.cs186.database.categories.Proj5Tests;
-import edu.berkeley.cs186.database.categories.HiddenTests;
 import edu.berkeley.cs186.database.categories.PublicTests;
 import edu.berkeley.cs186.database.common.Pair;
 import edu.berkeley.cs186.database.concurrency.DummyLockContext;
@@ -60,7 +59,6 @@ public class TestRecoveryManager {
      * test transaction operation(commit, abort & end) by logPageWrite
      * related log type:
      * CommitTransactionLogRecord, UpdatePageLogRecord
-     * @throws Exception
      */
     @Test
     @Category(PublicTests.class)
@@ -122,7 +120,6 @@ public class TestRecoveryManager {
 
     /**
      * added by developer
-     * @throws Exception
      */
     @Test
     @Category(PublicTests.class)
@@ -159,7 +156,6 @@ public class TestRecoveryManager {
      * related log type:
      * UpdatePageLogRecord, AllocPartLogRecord, CommitTransactionLogRecord
      * AbortTransactionLogRecord, EndTransactionLogRecord, UndoUpdatePageLogRecord
-     * @throws Exception
      */
     @Test
     @Category(PublicTests.class)
@@ -191,7 +187,6 @@ public class TestRecoveryManager {
 
         assertEquals(LSNs[7], transactionTable.get(1L).lastLSN);
         assertEquals(LSNs[6], transactionTable.get(2L).lastLSN);
-        // TODO understand
         assertEquals(LogManagerImpl.maxLSN(LogManagerImpl.getLSNPage(LSNs[6])), logManager.getFlushedLSN());
         assertEquals(Transaction.Status.COMMITTING, transactionTable.get(2L).transaction.getStatus());
 
@@ -253,7 +248,6 @@ public class TestRecoveryManager {
         assertTrue(transactionTable.isEmpty());
 
         // Flushed log tail correct
-        // TODO understand
         assertEquals(LogManagerImpl.maxLSN(LogManagerImpl.getLSNPage(LSNs[6])), logManager.getFlushedLSN());
 
         assertEquals(Transaction.Status.COMPLETE, transaction1.getStatus());
@@ -264,7 +258,6 @@ public class TestRecoveryManager {
      * test logPageWrite(simple & two part)
      * related log type:
      * UpdatePageLogRecord
-     * @throws Exception
      */
     @Test
     @Category(PublicTests.class)
@@ -324,7 +317,6 @@ public class TestRecoveryManager {
 
         long secondLSN = recoveryManager.logPageWrite(transaction1.getTransNum(), pageNum, (short) 0,
                          before, after);
-        // TODO why minus 10000L?
         long firstLSN = secondLSN - 10000L; // previous log page, both at start of a log page
 
         LogRecord firstLogRecord = logManager.fetchLogRecord(firstLSN);
@@ -371,7 +363,6 @@ public class TestRecoveryManager {
 
     /**
      * added by developer
-     * @throws Exception
      */
     @Test
     @Category(PublicTests.class)
@@ -437,7 +428,6 @@ public class TestRecoveryManager {
 
     /**
      * unit tests for recovery
-     * @throws Exception
      */
     @Test
     @Category(PublicTests.class)
@@ -491,6 +481,7 @@ public class TestRecoveryManager {
         assertEquals(new HashSet<>(Collections.singletonList(10000000001L)),
                      transactionTable.get(2L).touchedPages);
         assertTrue(transactionTable.containsKey(3L));
+        // TODO understand
         assertTrue(transactionTable.get(3L).lastLSN > LSNs.get(7));
         assertEquals(new HashSet<>(Collections.singletonList(10000000003L)),
                      transactionTable.get(3L).touchedPages);

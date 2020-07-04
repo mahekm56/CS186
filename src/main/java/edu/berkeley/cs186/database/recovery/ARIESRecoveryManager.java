@@ -510,8 +510,37 @@ public class ARIESRecoveryManager implements RecoveryManager {
         Map<Long, List<Long>> touchedPages = new HashMap<>();
         int numTouchedPages = 0;
 
-        // TODO(proj5): generate end checkpoint record(s) for DPT and transaction table
+        // iterate DPT
+        for(Map.Entry<Long, Long> entry : dirtyPageTable.entrySet()) {
+            boolean fitsAfterAdd = EndCheckpointLogRecord.fitsInOneRecord(dpt.size()+1, txnTable.size(), touchedPages.size(), numTouchedPages);
+            if(!fitsAfterAdd) {
+                LogRecord endRecord = new EndCheckpointLogRecord(dpt, txnTable, touchedPages);
+                logManager.appendToLog(endRecord);
 
+                dpt.clear();
+                txnTable.clear();
+                touchedPages.clear();
+                numTouchedPages = 0;
+            }
+            dpt.put(entry.getKey(), entry.getValue());
+        }
+        // iterate status/lastLSN inside ATT
+        for(Map.Entry<Long, TransactionTableEntry> entry : transactionTable.entrySet()) {
+            long transNum = entry.getKey();
+            TransactionTableEntry transactionTableEntry = entry.getValue();
+            boolean fitsAfterAdd = EndCheckpointLogRecord.fitsInOneRecord(dpt.size(), txnTable.size()+1, touchedPages.size(), numTouchedPages);
+            if(!fitsAfterAdd) {
+                LogRecord endRecord = new EndCheckpointLogRecord(dpt, txnTable, touchedPages);
+                logManager.appendToLog(endRecord);
+
+                dpt.clear();
+                txnTable.clear();
+                touchedPages.clear();
+                numTouchedPages = 0;
+            }
+            txnTable.put(transNum, new Pair<>(transactionTableEntry.transaction.getStatus(), transactionTableEntry.lastLSN));
+        }
+        // iterate touch pages inside ATT
         for (Map.Entry<Long, TransactionTableEntry> entry : transactionTable.entrySet()) {
             long transNum = entry.getKey();
             for (long pageNum : entry.getValue().touchedPages) {
@@ -548,8 +577,6 @@ public class ARIESRecoveryManager implements RecoveryManager {
         MasterLogRecord masterRecord = new MasterLogRecord(beginLSN);
         logManager.rewriteMasterRecord(masterRecord);
     }
-
-    // TODO(proj5): add any helper methods needed
 
     @Override
     public void close() {
