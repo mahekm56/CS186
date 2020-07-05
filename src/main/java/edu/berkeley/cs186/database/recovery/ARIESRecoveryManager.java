@@ -620,6 +620,8 @@ public class ARIESRecoveryManager implements RecoveryManager {
         return () -> {
             restartUndo();
             this.checkpoint();
+            // for debug
+            this.logManager.print();
         };
     }
 
@@ -872,14 +874,16 @@ public class ARIESRecoveryManager implements RecoveryManager {
             long lastLSN = queue.poll();
             LogRecord logRecord = this.logManager.fetchLogRecord(lastLSN);
             if(logRecord.isUndoable()) {
-                Pair<LogRecord, Boolean> clr = logRecord.undo(lastLSN);
+                long transactionNum = logRecord.getTransNum().get();
+                TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
+                long prevLSN = transactionTableEntry.lastLSN;
+
+                Pair<LogRecord, Boolean> clr = logRecord.undo(prevLSN);
                 long currLSN = this.logManager.appendToLog(clr.getFirst());
                 if (clr.getSecond()) {
                     this.logManager.flushToLSN(currLSN);
                 }
                 // update ATT
-                long transactionNum = logRecord.getTransNum().get();
-                TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
                 transactionTableEntry.lastLSN = currLSN;
                 // update DPT
                 long pageNum = logRecord.getPageNum().get();
