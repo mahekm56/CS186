@@ -12,3 +12,10 @@ docker start -ai cs186
 ```bash
 mvn clean test -D proj=N
 ```
+
+#### Note
+```java
+TestRecoveryManager.testAnalysisCheckpoints2() {
+    iter.next(); // add by developer at line 1445
+}
+```
