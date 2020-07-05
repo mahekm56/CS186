@@ -59,6 +59,8 @@ class DummyTransaction extends AbstractTransaction {
     public void cleanup() {
         assert (!cleanedUp && getStatus() != Status.COMPLETE);
         cleanedUp = true;
+        // added by developer
+        transactions.remove(this.transNum);
     }
 
     @Override

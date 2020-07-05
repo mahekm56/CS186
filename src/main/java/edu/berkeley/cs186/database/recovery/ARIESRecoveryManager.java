@@ -689,6 +689,9 @@ public class ARIESRecoveryManager implements RecoveryManager {
      * move all transactions in the RUNNING state to RECOVERY_ABORTING.
      */
     void restartAnalysis() {
+        // for debug
+        System.out.println("---------- before restart analysis ----------");
+        this.logManager.print();
         // Read master record
         LogRecord record = logManager.fetchLogRecord(0L);
         assert (record != null);
@@ -743,6 +746,9 @@ public class ARIESRecoveryManager implements RecoveryManager {
                 transactionTableEntry.lastLSN = this.logManager.appendToLog(abortTransactionLogRecord);
             }
         }
+        // for debug
+        System.out.println("---------- after restart analysis ----------");
+        this.logManager.print();
     }
 
     private void restartAnalysisForTxnOperation(LogRecord logRecord) {
@@ -782,12 +788,16 @@ public class ARIESRecoveryManager implements RecoveryManager {
             }
         }
         this.transactionTable.put(transactionNum, transactionTableEntry);
-
     }
 
     private void restartAnalysisForTxnStatusChange(LogRecord logRecord) {
         long transactionNum = logRecord.getTransNum().get();
         TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
+        if(transactionTableEntry == null) {
+            Transaction transaction = newTransaction.apply(transactionNum);
+            transactionTableEntry = new TransactionTableEntry(transaction);
+            this.transactionTable.put(transactionNum, transactionTableEntry);
+        }
         transactionTableEntry.lastLSN = logRecord.LSN;
         Transaction transaction = transactionTableEntry.transaction;
         if(logRecord.type == LogType.COMMIT_TRANSACTION) {
@@ -799,7 +809,6 @@ public class ARIESRecoveryManager implements RecoveryManager {
             transaction.setStatus(Transaction.Status.COMPLETE);
             this.transactionTable.remove(transactionNum);
         }
-
     }
 
     private void restartAnalysisForEndCheckpoint(LogRecord logRecord) {
