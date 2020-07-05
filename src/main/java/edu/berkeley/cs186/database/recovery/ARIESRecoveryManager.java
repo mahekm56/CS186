@@ -181,23 +181,18 @@ public class ARIESRecoveryManager implements RecoveryManager {
                     lastLSN = clrPair.getFirst().getUndoNextLSN();
 
                     if(clrPair.getFirst().getPageNum().isPresent()) {
-                        long pageNum = clrPair.getFirst().getPageNum().get();
-                        // update DPT
-                        if(logRecord.type == LogType.UPDATE_PAGE || logRecord.type == LogType.UNDO_UPDATE_PAGE) {
-                            // UpdatePage/UndoUpdatePage both may dirty a page in memory, without flushing changes to disk.
-                            if(!this.dirtyPageTable.containsKey(pageNum) || this.dirtyPageTable.get(pageNum) > logRecord.LSN) {
-                                this.dirtyPageTable.put(pageNum, currLSN);
-                            }
-                        }else{
-                            // AllocPage/FreePage/UndoAllocPage/UndoFreePage all make their changes visible on disk immediately,
-                            // and can be seen as flushing all changes at the time (including their own) to disk
-                            this.dirtyPageTable.remove(pageNum);
-                        }
+                        this.updateDPTWhenRollback(clrPair.getFirst(), currLSN);
                     }
 
                     clrPair.getFirst().redo(this.diskSpaceManager, this.bufferManager);
                 }else{
-                    lastLSN = logRecord.getPrevLSN();
+                    if(logRecord.type == LogType.UNDO_UPDATE_PAGE || logRecord.type == LogType.UNDO_ALLOC_PAGE
+                            || logRecord.type == LogType.UNDO_FREE_PAGE || logRecord.type == LogType.UNDO_ALLOC_PART
+                            || logRecord.type == LogType.UNDO_FREE_PART) {
+                        lastLSN = logRecord.getUndoNextLSN();
+                    }else{
+                        lastLSN = logRecord.getPrevLSN();
+                    }
                 }
             }
         }
@@ -490,21 +485,33 @@ public class ARIESRecoveryManager implements RecoveryManager {
     public void rollbackToSavepoint(long transNum, String name) {
         TransactionTableEntry transactionEntry = transactionTable.get(transNum);
         assert (transactionEntry != null);
-
         // All of the transaction's changes strictly after the record at LSN should be undone.
         long LSN = transactionEntry.getSavepoint(name);
         Optional<Long> lastLSN = Optional.of(transactionEntry.lastLSN);
+        long currLSN = lastLSN.get();
         while (lastLSN.isPresent() && lastLSN.get() > LSN) {
             LogRecord logRecord = this.logManager.fetchLogRecord(lastLSN.get());
             if(logRecord.isUndoable()) {
-                Pair<LogRecord, Boolean> clrPair = logRecord.undo(lastLSN.get());
-                long currLSN = this.logManager.appendToLog(clrPair.getFirst());
+                Pair<LogRecord, Boolean> clrPair = logRecord.undo(currLSN);
+                currLSN = this.logManager.appendToLog(clrPair.getFirst());
                 if(clrPair.getSecond()) {
                     this.logManager.flushToLSN(currLSN);
                 }
                 lastLSN = clrPair.getFirst().getUndoNextLSN();
+
+                if(clrPair.getFirst().getPageNum().isPresent()) {
+                    this.updateDPTWhenRollback(clrPair.getFirst(), currLSN);
+                }
+
+                clrPair.getFirst().redo(this.diskSpaceManager, this.bufferManager);
             }else{
-                lastLSN = logRecord.getPrevLSN();
+                if(logRecord.type == LogType.UNDO_UPDATE_PAGE || logRecord.type == LogType.UNDO_ALLOC_PAGE
+                    || logRecord.type == LogType.UNDO_FREE_PAGE || logRecord.type == LogType.UNDO_ALLOC_PART
+                    || logRecord.type == LogType.UNDO_FREE_PART) {
+                        lastLSN = logRecord.getUndoNextLSN();
+                }else{
+                    lastLSN = logRecord.getPrevLSN();
+                }
             }
         }
         // for debug
@@ -906,18 +913,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
                 if (clr.getSecond()) {
                     this.logManager.flushToLSN(currLSN);
                 }
-                long pageNum = logRecord.getPageNum().get();
-                // update DPT
-                if(logRecord.type == LogType.UPDATE_PAGE || logRecord.type == LogType.UNDO_UPDATE_PAGE) {
-                    // UpdatePage/UndoUpdatePage both may dirty a page in memory, without flushing changes to disk.
-                    if(!this.dirtyPageTable.containsKey(pageNum) || this.dirtyPageTable.get(pageNum) > logRecord.LSN) {
-                        this.dirtyPageTable.put(pageNum, currLSN);
-                    }
-                }else{
-                    // AllocPage/FreePage/UndoAllocPage/UndoFreePage all make their changes visible on disk immediately,
-                    // and can be seen as flushing all changes at the time (including their own) to disk
-                    this.dirtyPageTable.remove(pageNum);
-                }
+                this.updateDPTWhenRollback(clr.getFirst(), currLSN);
                 // update ATT
                 transactionTableEntry.lastLSN = currLSN;
 
@@ -941,6 +937,20 @@ public class ARIESRecoveryManager implements RecoveryManager {
         this.logManager.print();
     }
 
+    private void updateDPTWhenRollback(LogRecord logRecord, long currLSN) {
+        long pageNum = logRecord.getPageNum().get();
+        // update DPT
+        if(logRecord.type == LogType.UPDATE_PAGE || logRecord.type == LogType.UNDO_UPDATE_PAGE) {
+            // UpdatePage/UndoUpdatePage both may dirty a page in memory, without flushing changes to disk.
+            if(!this.dirtyPageTable.containsKey(pageNum) || this.dirtyPageTable.get(pageNum) > logRecord.LSN) {
+                this.dirtyPageTable.put(pageNum, currLSN);
+            }
+        }else{
+            // AllocPage/FreePage/UndoAllocPage/UndoFreePage all make their changes visible on disk immediately,
+            // and can be seen as flushing all changes at the time (including their own) to disk
+            this.dirtyPageTable.remove(pageNum);
+        }
+    }
     /*private void updateDPTWhenFlush() {
         if(this.transactionTable != null && !this.transactionTable.isEmpty()) {
             for(Map.Entry<Long, TransactionTableEntry> entry : this.transactionTable.entrySet()) {
