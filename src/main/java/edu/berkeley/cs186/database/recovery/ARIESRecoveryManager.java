@@ -603,11 +603,24 @@ public class ARIESRecoveryManager implements RecoveryManager {
      */
     @Override
     public Runnable restart() {
-        // TODO(proj5): implement
         restartAnalysis();
         restartRedo();
-        restartUndo();
-        return () -> {};
+        for(Map.Entry<Long,Long> entry : this.dirtyPageTable.entrySet()) {
+            long pageNum = entry.getKey();
+            Page dirtyPage = this.bufferManager.fetchPage(this.dbContext, pageNum, false);
+            byte[] before = new byte[BufferManager.EFFECTIVE_PAGE_SIZE];
+            dirtyPage.getBuffer().get(before);
+            byte[] after = new byte[DiskSpaceManager.PAGE_SIZE];
+            this.diskSpaceManager.readPage(pageNum, after);
+            byte[] trueAfter = Arrays.copyOfRange(after, BufferManager.RESERVED_SPACE, after.length);
+            if(Arrays.equals(before, trueAfter)) {
+                this.dirtyPageTable.remove(pageNum);
+            }
+        }
+        return () -> {
+            restartUndo();
+            this.checkpoint();
+        };
     }
 
     /**
