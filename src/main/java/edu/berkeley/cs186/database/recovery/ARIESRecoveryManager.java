@@ -692,6 +692,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         // for debug
         System.out.println("---------- before restart analysis ----------");
         this.logManager.print();
+        Set<Long> presentTransactionNum = new HashSet<>();
         // Read master record
         LogRecord record = logManager.fetchLogRecord(0L);
         assert (record != null);
@@ -715,18 +716,18 @@ public class ARIESRecoveryManager implements RecoveryManager {
                 case UNDO_FREE_PAGE:
                 case UNDO_ALLOC_PART:
                 case UNDO_FREE_PART:
-                    this.restartAnalysisForTxnOperation(logRecord);
+                    this.restartAnalysisForTxnOperation(logRecord, presentTransactionNum);
                     break;
                 case COMMIT_TRANSACTION:
                 case ABORT_TRANSACTION:
                 case END_TRANSACTION:
-                    this.restartAnalysisForTxnStatusChange(logRecord);
+                    this.restartAnalysisForTxnStatusChange(logRecord, presentTransactionNum);
                     break;
                 case BEGIN_CHECKPOINT:
                     updateTransactionCounter.accept(logRecord.getMaxTransactionNum().get());
                     break;
                 case END_CHECKPOINT:
-                    this.restartAnalysisForEndCheckpoint(logRecord);
+                    this.restartAnalysisForEndCheckpoint(logRecord, presentTransactionNum);
                     break;
             }
         }
@@ -751,8 +752,9 @@ public class ARIESRecoveryManager implements RecoveryManager {
         this.logManager.print();
     }
 
-    private void restartAnalysisForTxnOperation(LogRecord logRecord) {
+    private void restartAnalysisForTxnOperation(LogRecord logRecord, Set<Long> presentTransactionNum) {
         long transactionNum = logRecord.getTransNum().get();
+        presentTransactionNum.add(transactionNum);
         TransactionTableEntry transactionTableEntry;
         // get transaction table entry
         if(!this.transactionTable.containsKey(transactionNum)) {
@@ -790,8 +792,9 @@ public class ARIESRecoveryManager implements RecoveryManager {
         this.transactionTable.put(transactionNum, transactionTableEntry);
     }
 
-    private void restartAnalysisForTxnStatusChange(LogRecord logRecord) {
+    private void restartAnalysisForTxnStatusChange(LogRecord logRecord, Set<Long> presentTransactionNum) {
         long transactionNum = logRecord.getTransNum().get();
+        presentTransactionNum.add(transactionNum);
         TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
         if(transactionTableEntry == null) {
             Transaction transaction = newTransaction.apply(transactionNum);
@@ -811,7 +814,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
         }
     }
 
-    private void restartAnalysisForEndCheckpoint(LogRecord logRecord) {
+    private void restartAnalysisForEndCheckpoint(LogRecord logRecord, Set<Long> presentTransactionNum) {
         if(logRecord.type == LogType.END_CHECKPOINT) {
             // update DPT
             for(Map.Entry<Long, Long> entry : logRecord.getDirtyPageTable().entrySet()) {
@@ -828,7 +831,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
                         transactionTableEntry.lastLSN = lastLSN;
                         this.transactionTable.put(transactionNum, transactionTableEntry);
                     }
-                }else {
+                }else if(!presentTransactionNum.contains(transactionNum)){
                     Transaction transaction = newTransaction.apply(transactionNum);
                     transaction.setStatus(status);
                     TransactionTableEntry transactionTableEntry = new TransactionTableEntry(transaction);
