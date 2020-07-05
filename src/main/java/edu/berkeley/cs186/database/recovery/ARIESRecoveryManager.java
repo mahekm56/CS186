@@ -8,6 +8,7 @@ import edu.berkeley.cs186.database.concurrency.LockType;
 import edu.berkeley.cs186.database.concurrency.LockUtil;
 import edu.berkeley.cs186.database.io.DiskSpaceManager;
 import edu.berkeley.cs186.database.memory.BufferManager;
+import edu.berkeley.cs186.database.memory.Page;
 
 import javax.swing.text.html.Option;
 import java.util.*;
@@ -603,6 +604,9 @@ public class ARIESRecoveryManager implements RecoveryManager {
     @Override
     public Runnable restart() {
         // TODO(proj5): implement
+        restartAnalysis();
+        restartRedo();
+        restartUndo();
         return () -> {};
     }
 
@@ -648,7 +652,6 @@ public class ARIESRecoveryManager implements RecoveryManager {
         MasterLogRecord masterRecord = (MasterLogRecord) record;
         // Get start checkpoint LSN
         long LSN = masterRecord.lastCheckpointLSN;
-        // TODO(proj5): implement
         // construct DPT & ATT
         Iterator<LogRecord> iterator = this.logManager.scanFrom(LSN);
         while (iterator.hasNext()) {
@@ -807,8 +810,33 @@ public class ARIESRecoveryManager implements RecoveryManager {
      * - about a partition (Alloc/Free/Undo..Part), redo it.
      */
     void restartRedo() {
-        // TODO(proj5): implement
-        return;
+        long startpoint = Long.MAX_VALUE;
+        for(Map.Entry<Long, Long> entry : this.dirtyPageTable.entrySet()) {
+            if(entry.getValue() < startpoint) {
+                startpoint = entry.getValue();
+            }
+        }
+        // from startpoint redo
+        Iterator<LogRecord> iterator = this.logManager.scanFrom(startpoint);
+        while (iterator.hasNext()) {
+            LogRecord logRecord = iterator.next();
+            if(logRecord.isRedoable()) {
+                if(logRecord.type == LogType.ALLOC_PART || logRecord.type == LogType.FREE_PAGE
+                    ||  logRecord.type == LogType.UNDO_ALLOC_PART || logRecord.type == LogType.UNDO_FREE_PART) {
+                    logRecord.redo(this.diskSpaceManager,this.bufferManager);
+                }else{
+                    long pageNum = logRecord.getPageNum().get();
+                    long recLSN = this.dirtyPageTable.get(pageNum);
+                    if(logRecord.LSN >= recLSN) {
+                        Page page = this.bufferManager.fetchPage(this.dbContext, pageNum, false);
+                        long pageLSN = page.getPageLSN();
+                        if(pageLSN < logRecord.LSN) {
+                            logRecord.redo(this.diskSpaceManager, this.bufferManager);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -823,11 +851,48 @@ public class ARIESRecoveryManager implements RecoveryManager {
      * - if the new LSN is 0, end the transaction and remove it from the queue and transaction table.
      */
     void restartUndo() {
-        // TODO(proj5): implement
-        return;
-    }
+        Queue<Long> queue = new PriorityQueue<>(Collections.reverseOrder());
+        for(Map.Entry<Long, TransactionTableEntry> entry : this.transactionTable.entrySet()) {
+            queue.add(entry.getValue().lastLSN);
+        }
+        while (!queue.isEmpty()) {
+            long lastLSN = queue.poll();
+            LogRecord logRecord = this.logManager.fetchLogRecord(lastLSN);
+            if(logRecord.isUndoable()) {
+                Pair<LogRecord, Boolean> clr = logRecord.undo(lastLSN);
+                long currLSN = this.logManager.appendToLog(clr.getFirst());
+                if (clr.getSecond()) {
+                    this.logManager.flushToLSN(currLSN);
+                }
+                // update ATT
+                long transactionNum = logRecord.getTransNum().get();
+                TransactionTableEntry transactionTableEntry = this.transactionTable.get(transactionNum);
+                transactionTableEntry.lastLSN = currLSN;
+                // update DPT
+                long pageNum = logRecord.getPageNum().get();
+                if(this.dirtyPageTable.containsKey(pageNum)) {
+                    long recLSN = this.dirtyPageTable.get(pageNum);
+                    if (recLSN >= logRecord.LSN) {
+                        this.dirtyPageTable.remove(pageNum);
+                    }
+                }
 
-    // TODO(proj5): add any helper methods needed
+                clr.getFirst().redo(this.diskSpaceManager, this.bufferManager);
+            }
+            long undoNextLSN;
+            if(logRecord.getUndoNextLSN().isPresent()) {
+                undoNextLSN = logRecord.getUndoNextLSN().get();
+            }else{
+                undoNextLSN = logRecord.getPrevLSN().get();
+            }
+            if(undoNextLSN == 0) {
+                this.end(logRecord.getTransNum().get());
+                this.transactionTable.remove(logRecord.getTransNum());
+            }else{
+                queue.add(undoNextLSN);
+            }
+        }
+    }
 
     // Helpers ///////////////////////////////////////////////////////////////////////////////
 
