@@ -515,7 +515,7 @@ public class ARIESRecoveryManager implements RecoveryManager {
             }
         }
         // for debug
-        this.logManager.print();
+        // this.logManager.print();
     }
 
     /**
